@@ -3,7 +3,7 @@ use std::io::Read;
 
 fn main() {
     let mut input = String::new();
-    File::open("../day01-input.txt")
+    File::open("data/day01-input.txt")
         .unwrap()
         .read_to_string(&mut input)
         .unwrap();
