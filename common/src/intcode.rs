@@ -1,4 +1,3 @@
-
 pub struct Computer {
     pub sr: Vec<i64>,
     pc: usize,
@@ -21,29 +20,90 @@ impl Computer {
         return Some(true);
     }
 
+    pub fn classify_step(&mut self, classification: &mut Vec<CellUse>) -> Option<bool> {
+        match self.peek().0 {
+            Op::Halt => classification[self.pc].set_op(),
+            Op::Add(a, b, c) | Op::Mul(a, b, c) => {
+                classification[self.pc].set_op();
+                classification[self.pc + 1].set_param();
+                classification[self.pc + 2].set_param();
+                classification[self.pc + 3].set_param();
+                classification[a].set_read();
+                classification[b].set_read();
+                classification[c].set_write();
+            }
+        }
+        self.step()
+    }
+
     fn fetch(&mut self) -> Op {
+        let (op, delta) = self.peek();
+        self.pc += delta;
+        op
+    }
+
+    pub fn peek(&self) -> (Op, usize) {
         let i = self.pc;
         let o = self.sr[i];
         let a = self.sr.get(i + 1).map(|&x| x as usize).unwrap_or(99999);
         let b = self.sr.get(i + 2).map(|&x| x as usize).unwrap_or(99999);
         let c = self.sr.get(i + 3).map(|&x| x as usize).unwrap_or(99999);
-        self.pc += 4;
         match o {
-            1 => Op::Add(a, b, c),
-            2 => Op::Mul(a, b, c),
-            99 => {
-                self.pc = i + 1;
-                Op::Halt
-            }
+            1 => (Op::Add(a, b, c), 4),
+            2 => (Op::Mul(a, b, c), 4),
+            99 => (Op::Halt, 1),
             _ => panic!("Unknown opcode: {}", o),
         }
     }
 }
 
-enum Op {
+pub enum Op {
     Add(usize, usize, usize),
     Mul(usize, usize, usize),
     Halt,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct CellUse {
+    op: bool,
+    param: bool,
+    write: bool,
+    read: bool,
+}
+
+impl Default for CellUse {
+    fn default() -> Self {
+        CellUse {
+            op: false,
+            param: false,
+            write: false,
+            read: false,
+        }
+    }
+}
+
+impl CellUse {
+    pub fn set_op(&mut self) {
+        self.op = true;
+    }
+    pub fn set_param(&mut self) {
+        self.param = true;
+    }
+    pub fn set_write(&mut self) {
+        self.write = true;
+    }
+    pub fn set_read(&mut self) {
+        self.read = true;
+    }
+}
+
+impl std::fmt::Display for CellUse {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", if self.op { "X" } else { "-" })?;
+        write!(f, "{}", if self.param { "P" } else { "-" })?;
+        write!(f, "{}", if self.read { "R" } else { "-" })?;
+        write!(f, "{}", if self.write { "W" } else { "-" })
+    }
 }
 
 #[cfg(test)]

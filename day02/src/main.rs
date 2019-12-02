@@ -1,6 +1,7 @@
-use common::computer::Computer;
+use common::intcode::Computer;
 
 fn main() {
+    extra();
     part1();
     part2();
 }
@@ -38,7 +39,16 @@ fn part2_compute(noun: i64, verb: i64) -> Option<i64> {
     Some(c.sr[0])
 }
 
-
+fn extra() {
+    let mut c = Computer::new(&INPUT);
+    c.sr[1] = 67;
+    c.sr[2] = 18;
+    let mut cls = vec![Default::default(); INPUT.len()];
+    while c.classify_step(&mut cls).unwrap() {}
+    for (i, ((inp, c), mem)) in INPUT.iter().zip(cls).zip(&c.sr).enumerate() {
+        println!("{:4} {} {:4} -> {}", i, c, inp, mem);
+    }
+}
 
 const INPUT: [i64; 129] = [
     1, 0, 0, 3, 1, 1, 2, 3, 1, 3, 4, 3, 1, 5, 0, 3, 2, 13, 1, 19, 1, 6, 19, 23, 2, 23, 6, 27, 1, 5,
