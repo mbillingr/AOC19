@@ -356,98 +356,57 @@ mod tests {
 
     #[test]
     fn example5_output() {
-        let mut c: IoComputer<_, _> = IoComputer::with_io(&[4, 3, 99, 42], NoStream, vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.sr, vec![4, 3, 99, 42]);
-        assert_eq!(c.output, vec![42]);
+        run_program(&[4, 3, 99, 42], &[], &[42])
     }
 
     #[test]
     fn example5_2_1() {
         let prog = vec![3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(7), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(8), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(9), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
+        run_program(&prog, &[7], &[0]);
+        run_program(&prog, &[8], &[1]);
+        run_program(&prog, &[9], &[0]);
     }
 
     #[test]
     fn example5_2_2() {
         let prog = vec![3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(7), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(8), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(9), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
+        run_program(&prog, &[7], &[1]);
+        run_program(&prog, &[8], &[0]);
+        run_program(&prog, &[9], &[0]);
     }
 
     #[test]
     fn example5_2_3() {
         let prog = vec![3, 3, 1108, -1, 8, 3, 4, 3, 99];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(7), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(8), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(9), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
+        run_program(&prog, &[7], &[0]);
+        run_program(&prog, &[8], &[1]);
+        run_program(&prog, &[9], &[0]);
     }
 
     #[test]
     fn example5_2_4() {
         let prog = vec![3, 3, 1107, -1, 8, 3, 4, 3, 99];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(7), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(8), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(9), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
+        run_program(&prog, &[7], &[1]);
+        run_program(&prog, &[8], &[0]);
+        run_program(&prog, &[9], &[0]);
     }
 
     #[test]
     fn example5_2_5() {
         let prog = vec![3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(0), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(1), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
+        run_program(&prog, &[-1], &[1]);
+        run_program(&prog, &[0], &[0]);
+        run_program(&prog, &[1], &[1]);
+        run_program(&prog, &[2], &[1]);
     }
 
     #[test]
     fn example5_2_6() {
         let prog = vec![3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(0), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![0]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(1), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1]);
+        run_program(&prog, &[-1], &[1]);
+        run_program(&prog, &[0], &[0]);
+        run_program(&prog, &[1], &[1]);
+        run_program(&prog, &[2], &[1]);
     }
 
     #[test]
@@ -457,16 +416,14 @@ mod tests {
             0, 1002, 21, 125, 20, 4, 20, 1105, 1, 46, 104, 999, 1105, 1, 46, 1101, 1000, 1, 20, 4,
             20, 1105, 1, 46, 98, 99,
         ];
-        let mut c = IoComputer::with_io(&prog, std::iter::once(7), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![999]);
+        run_program(&prog, &[7], &[999]);
+        run_program(&prog, &[8], &[1000]);
+        run_program(&prog, &[9], &[1001]);
+    }
 
-        let mut c = IoComputer::with_io(&prog, std::iter::once(8), vec![]);
+    fn run_program(prog: &[i64], input: &[i64], expected_output: &[i64]) {
+        let mut c = IoComputer::with_io(prog, input.iter().cloned(), vec![]);
         while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1000]);
-
-        let mut c = IoComputer::with_io(&prog, std::iter::once(9), vec![]);
-        while c.step().unwrap() {}
-        assert_eq!(c.output, vec![1001]);
+        assert_eq!(c.output, expected_output);
     }
 }
