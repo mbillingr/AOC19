@@ -2,7 +2,7 @@ pub type Computer = IoComputer<NoStream, NoStream>;
 
 pub struct IoComputer<I: Input, O: Output> {
     pub sr: Vec<i64>,
-    pc: usize,
+    pub pc: usize,
     pub input: I,
     pub output: O,
 }
@@ -155,7 +155,10 @@ impl<I: Input, O: Output> IoComputer<I, O> {
     }
 
     pub fn peek(&self) -> Option<(Op, usize)> {
-        let i = self.pc;
+        self.peek_at(self.pc)
+    }
+
+    pub fn peek_at(&self, i: usize) -> Option<(Op, usize)> {
         let o = self.sr[i] % 100;
         let fa = (self.sr[i] / 100) % 10;
         let fb = (self.sr[i] / 1000) % 10;
@@ -163,9 +166,9 @@ impl<I: Input, O: Output> IoComputer<I, O> {
         let a = self.sr.get(i + 1).copied().unwrap_or(999999);
         let b = self.sr.get(i + 2).copied().unwrap_or(999999);
         let c = self.sr.get(i + 3).copied().unwrap_or(999999);
-        let a = Operand::new(fa, a);
-        let b = Operand::new(fb, b);
-        let c = Operand::new(fc, c);
+        let a = Operand::new(fa, a)?;
+        let b = Operand::new(fb, b)?;
+        let c = Operand::new(fc, c)?;
         Some(match o {
             1 => (Op::Add(a, b, c), 4),
             2 => (Op::Mul(a, b, c), 4),
@@ -176,7 +179,8 @@ impl<I: Input, O: Output> IoComputer<I, O> {
             7 => (Op::Ltn(a, b, c), 4),
             8 => (Op::Equ(a, b, c), 4),
             99 => (Op::Halt, 1),
-            _ => panic!("Unknown opcode: {}", o),
+            //_ => panic!("Unknown opcode: {}", o),
+            _ => return None,
         })
     }
 
@@ -189,7 +193,7 @@ impl<I: Input, O: Output> IoComputer<I, O> {
 
     fn set(&mut self, o: Operand, val: i64) -> Option<()> {
         match o {
-            Operand::Imm(i) => None,
+            Operand::Imm(_) => None,
             Operand::Pos(p) => self.sr.get_mut(p).map(|cell| *cell = val),
         }
     }
@@ -215,22 +219,23 @@ pub enum Operand {
 }
 
 impl Operand {
-    pub fn new(flag: i64, x: i64) -> Self {
+    pub fn new(flag: i64, x: i64) -> Option<Self> {
         match flag {
-            0 => Operand::Pos(x as usize),
-            1 => Operand::Imm(x),
-            _ => panic!("Invalid flag"),
+            0 => Some(Operand::Pos(x as usize)),
+            1 => Some(Operand::Imm(x)),
+            _ => None,
         }
     }
 }
 
+/// Flags that indicate how memory locations have been used by the intcode program
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct CellUse {
-    op: bool,
-    param: bool,
-    write: bool,
-    read: bool,
-    immediate: bool,
+    pub op: bool,
+    pub param: bool,
+    pub write: bool,
+    pub read: bool,
+    pub immediate: bool,
 }
 
 impl Default for CellUse {
@@ -276,15 +281,6 @@ impl std::fmt::Display for CellUse {
                 (false, false) => "-",
             }
         )?;
-        write!(
-            f,
-            "{}",
-            if !self.param && self.immediate {
-                "I"
-            } else {
-                "-"
-            }
-        )?;
         write!(f, "{}", if self.read { "R" } else { "-" })?;
         write!(f, "{}", if self.write { "W" } else { "-" })
     }
@@ -293,6 +289,27 @@ impl std::fmt::Display for CellUse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn looping1() {
+        let prog = &[
+            00101, 1, 14, 14, //  0 : cnt = cnt + 1
+            00004, 14, //  4 : OUT cnt
+            00108, 10, 14, 15, //  6 : cond = cnt == 10
+            01006, 15, 0,     // 10 : IF !cond JMP 0
+            00099, // 13 : HALT
+            0,     // 14 : cnt
+            0,     // 15 : cond
+        ];
+        let mut c = IoComputer::with_io(prog, NoStream, vec![]);
+        /*println!("{:?}", c.peek_at(0));
+        println!("{:?}", c.peek_at(4));
+        println!("{:?}", c.peek_at(6));
+        println!("{:?}", c.peek_at(10));
+        println!("{:?}", c.peek_at(13));*/
+        while c.step().unwrap() {}
+        assert_eq!(c.output, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
 
     #[test]
     fn simple_example() {
