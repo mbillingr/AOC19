@@ -1,4 +1,5 @@
 pub type Computer = IoComputer<NoStream, NoStream>;
+use std::sync::mpsc;
 
 pub struct IoComputer<I: Input, O: Output> {
     pub sr: Vec<i64>,
@@ -15,44 +16,6 @@ pub trait Input {
 pub trait Output {
     fn init() -> Self;
     fn write(&mut self, val: i64);
-}
-
-pub struct NoStream;
-
-impl Input for NoStream {
-    fn init() -> Self {
-        NoStream
-    }
-    fn read(&mut self) -> i64 {
-        panic!("read from non-input")
-    }
-}
-
-impl Output for NoStream {
-    fn init() -> NoStream {
-        NoStream
-    }
-    fn write(&mut self, _: i64) {
-        panic!("write to non-output")
-    }
-}
-
-impl<T: Iterator<Item = i64>> Input for T {
-    fn init() -> T {
-        unimplemented!()
-    }
-    fn read(&mut self) -> i64 {
-        self.next().expect("Input underflow")
-    }
-}
-
-impl Output for Vec<i64> {
-    fn init() -> Self {
-        vec![]
-    }
-    fn write(&mut self, val: i64) {
-        self.push(val)
-    }
 }
 
 impl<I: Input, O: Output> IoComputer<I, O> {
@@ -283,6 +246,44 @@ impl std::fmt::Display for CellUse {
         )?;
         write!(f, "{}", if self.read { "R" } else { "-" })?;
         write!(f, "{}", if self.write { "W" } else { "-" })
+    }
+}
+
+pub struct NoStream;
+
+impl Input for NoStream {
+    fn init() -> Self {
+        NoStream
+    }
+    fn read(&mut self) -> i64 {
+        panic!("read from non-input")
+    }
+}
+
+impl Output for NoStream {
+    fn init() -> NoStream {
+        NoStream
+    }
+    fn write(&mut self, _: i64) {
+        panic!("write to non-output")
+    }
+}
+
+impl<T: Iterator<Item = i64>> Input for T {
+    fn init() -> T {
+        unimplemented!()
+    }
+    fn read(&mut self) -> i64 {
+        self.next().expect("Input underflow")
+    }
+}
+
+impl Output for Vec<i64> {
+    fn init() -> Self {
+        vec![]
+    }
+    fn write(&mut self, val: i64) {
+        self.push(val)
     }
 }
 
