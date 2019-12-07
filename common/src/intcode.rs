@@ -65,6 +65,40 @@ impl<I: Input, O: Output> IoComputer<I, O> {
         Some(())
     }
 
+    pub fn run_func(&mut self, input: i64) -> Option<WhatsUp> {
+        let mut input = Some(input);
+        loop {
+            let pc = self.pc;
+            match self.fetch()? {
+                Op::Halt => return Some(WhatsUp::Halt),
+                Op::Add(a, b, c) => self.set(c, self.get(a)? + self.get(b)?)?,
+                Op::Mul(a, b, c) => self.set(c, self.get(a)? * self.get(b)?)?,
+                Op::Inp(a) => match input.take() {
+                    Some(x) => self.set(a, x)?,
+                    None => {
+                        self.pc = pc;
+                        return Some(WhatsUp::NeedInput);
+                    }
+                },
+                Op::Out(a) => return Some(WhatsUp::Output(self.get(a)?)),
+                Op::Jit(a, b) => {
+                    if self.get(a)? != 0 {
+                        self.pc = self.get(b)? as usize;
+                    }
+                }
+                Op::Jif(a, b) => {
+                    if self.get(a)? == 0 {
+                        self.pc = self.get(b)? as usize;
+                    }
+                }
+                Op::Equ(a, b, c) => {
+                    self.set(c, if self.get(a)? == self.get(b)? { 1 } else { 0 })?
+                }
+                Op::Ltn(a, b, c) => self.set(c, if self.get(a)? < self.get(b)? { 1 } else { 0 })?,
+            }
+        }
+    }
+
     pub fn step(&mut self) -> Option<bool> {
         match self.fetch()? {
             Op::Halt => return Some(false),
@@ -120,7 +154,10 @@ impl<I: Input, O: Output> IoComputer<I, O> {
                 let x = self.get(a)?;
                 {
                     let mut cache = IO_CACHE.lock().unwrap();
-                    cache.insert(self.last_input.clone(), (x, self.pc, self.sr.clone(), self.n_ops));
+                    cache.insert(
+                        self.last_input.clone(),
+                        (x, self.pc, self.sr.clone(), self.n_ops),
+                    );
                 }
                 self.output.write(x)
             }
@@ -237,6 +274,13 @@ impl<I: Input, O: Output> IoComputer<I, O> {
             Operand::Pos(p) => self.sr.get_mut(p).map(|cell| *cell = val),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum WhatsUp {
+    Halt,
+    NeedInput,
+    Output(i64),
 }
 
 #[derive(Debug)]

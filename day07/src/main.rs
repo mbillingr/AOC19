@@ -1,4 +1,4 @@
-use common::intcode::IoComputer;
+use common::intcode::{Computer, IoComputer, WhatsUp};
 use permute::permute;
 use std::sync::mpsc;
 use std::thread;
@@ -22,8 +22,7 @@ fn find_maximum(program: &[i64]) -> (i64, Vec<i64>) {
 fn find_maximum2(program: &[i64]) -> (i64, Vec<i64>) {
     permute(vec![9, 8, 7, 6, 5])
         .into_iter()
-        .map(|seq| (run_loop(&seq, &program), seq))
-        .inspect(|x| println!("{:?}", x))
+        .map(|seq| (run_loop2(&seq, &program), seq))
         .max()
         .unwrap()
 }
@@ -42,6 +41,7 @@ fn amplifier(sig_in: i64, phase: i64, program: &[i64]) -> i64 {
     c.output.pop().unwrap()
 }
 
+#[allow(dead_code)]
 fn run_loop(phases: &[i64], prog: &[i64]) -> i64 {
     let (s1, r1) = mpsc::sync_channel(0);
     let (s2, r2) = mpsc::sync_channel(0);
@@ -82,6 +82,30 @@ fn run_loop(phases: &[i64], prog: &[i64]) -> i64 {
     t5.join().unwrap();
 
     r0.into_iter().last().unwrap()
+}
+
+fn run_loop2(phases: &[i64], prog: &[i64]) -> i64 {
+    let mut amps: Vec<_> = phases
+        .iter()
+        .map(|&p| {
+            let mut c = Computer::new(prog);
+            assert_eq!(c.run_func(p), Some(WhatsUp::NeedInput));
+            c
+        })
+        .collect();
+
+    let mut sig = 0;
+    'done: loop {
+        for amp in &mut amps {
+            match amp.run_func(sig).unwrap() {
+                WhatsUp::Halt => break 'done,
+                WhatsUp::NeedInput => unreachable!(),
+                WhatsUp::Output(x) => sig = x,
+            }
+        }
+    }
+
+    sig
 }
 
 const INPUT: [i64; 499] = [
