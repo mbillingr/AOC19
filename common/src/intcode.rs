@@ -1,11 +1,23 @@
 pub type Computer = IoComputer<NoStream, NoStream>;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::sync::mpsc;
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref IO_CACHE: Mutex<HashMap<(i64, usize, Vec<i64>), (i64, usize, Vec<i64>, usize)>> =
+        Mutex::new(HashMap::new());
+}
 
 pub struct IoComputer<I: Input, O: Output> {
     pub sr: Vec<i64>,
     pub pc: usize,
     pub input: I,
     pub output: O,
+
+    last_input: (i64, usize, Vec<i64>),
+    n_ops: usize,
+    pub ops_saved: usize,
 }
 
 pub trait Input {
@@ -25,6 +37,9 @@ impl<I: Input, O: Output> IoComputer<I, O> {
             pc: 0,
             input: Input::init(),
             output: Output::init(),
+            last_input: (-99999, 0, input.to_vec()),
+            n_ops: 0,
+            ops_saved: 0,
         }
     }
 
@@ -34,7 +49,20 @@ impl<I: Input, O: Output> IoComputer<I, O> {
             pc: 0,
             input,
             output,
+            last_input: (-99999, 0, program.to_vec()),
+            n_ops: 0,
+            ops_saved: 0,
         }
+    }
+
+    pub fn run(&mut self) -> Option<()> {
+        while self.step()? {}
+        Some(())
+    }
+
+    pub fn run_iocached(&mut self) -> Option<()> {
+        while self.step_iocached()? {}
+        Some(())
     }
 
     pub fn step(&mut self) -> Option<bool> {
@@ -47,6 +75,55 @@ impl<I: Input, O: Output> IoComputer<I, O> {
                 self.set(a, x)?;
             }
             Op::Out(a) => self.output.write(self.get(a)?),
+            Op::Jit(a, b) => {
+                if self.get(a)? != 0 {
+                    self.pc = self.get(b)? as usize;
+                }
+            }
+            Op::Jif(a, b) => {
+                if self.get(a)? == 0 {
+                    self.pc = self.get(b)? as usize;
+                }
+            }
+            Op::Equ(a, b, c) => self.set(c, if self.get(a)? == self.get(b)? { 1 } else { 0 })?,
+            Op::Ltn(a, b, c) => self.set(c, if self.get(a)? < self.get(b)? { 1 } else { 0 })?,
+        }
+        Some(true)
+    }
+
+    pub fn step_iocached(&mut self) -> Option<bool> {
+        self.n_ops += 1;
+        match self.fetch()? {
+            Op::Halt => return Some(false),
+            Op::Add(a, b, c) => self.set(c, self.get(a)? + self.get(b)?)?,
+            Op::Mul(a, b, c) => self.set(c, self.get(a)? * self.get(b)?)?,
+            Op::Inp(a) => {
+                let x = self.input.read();
+                self.last_input = (x, self.pc, self.sr.clone());
+                self.n_ops = 0;
+
+                let cached = {
+                    let cache = IO_CACHE.lock().unwrap();
+                    cache.get(&self.last_input).cloned()
+                };
+
+                if let Some(outstate) = cached {
+                    self.output.write(outstate.0);
+                    self.pc = outstate.1;
+                    self.sr = outstate.2.clone();
+                    self.ops_saved += outstate.3;
+                } else {
+                    self.set(a, x)?;
+                }
+            }
+            Op::Out(a) => {
+                let x = self.get(a)?;
+                {
+                    let mut cache = IO_CACHE.lock().unwrap();
+                    cache.insert(self.last_input.clone(), (x, self.pc, self.sr.clone(), self.n_ops));
+                }
+                self.output.write(x)
+            }
             Op::Jit(a, b) => {
                 if self.get(a)? != 0 {
                     self.pc = self.get(b)? as usize;
@@ -175,7 +252,7 @@ pub enum Op {
     Halt,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Operand {
     Pos(usize),
     Imm(i64),
@@ -194,58 +271,82 @@ impl Operand {
 /// Flags that indicate how memory locations have been used by the intcode program
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct CellUse {
-    pub op: bool,
-    pub param: bool,
-    pub write: bool,
-    pub read: bool,
-    pub immediate: bool,
+    pub op: usize,
+    pub param: usize,
+    pub write: usize,
+    pub read: usize,
+    pub immediate: usize,
 }
 
 impl Default for CellUse {
     fn default() -> Self {
         CellUse {
-            op: false,
-            param: false,
-            write: false,
-            read: false,
-            immediate: false,
+            op: 0,
+            param: 0,
+            write: 0,
+            read: 0,
+            immediate: 0,
         }
     }
 }
 
 impl CellUse {
     pub fn set_op(&mut self) {
-        self.op = true;
+        self.op += 1;
     }
     pub fn set_param(&mut self) {
-        self.param = true;
+        self.param += 1;
     }
     pub fn set_write(&mut self) {
-        self.write = true;
+        self.write += 1;
     }
     pub fn set_read(&mut self) {
-        self.read = true;
+        self.read += 1;
     }
     pub fn set_immediate(&mut self) {
-        self.immediate = true;
+        self.immediate += 1;
     }
 }
 
 impl std::fmt::Display for CellUse {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", if self.op { "X" } else { "-" })?;
+        write!(
+            f,
+            "{}",
+            match self.op {
+                0 => "-",
+                1 => "x",
+                _ => "X",
+            }
+        )?;
         write!(
             f,
             "{}",
             match (self.param, self.immediate) {
-                (true, true) => panic!("invalid flags"),
-                (true, false) => "P",
-                (false, true) => "I",
-                (false, false) => "-",
+                (0, 0) => "-",
+                (_, 0) => "P",
+                (0, _) => "I",
+                (_, _) => "?",
             }
         )?;
-        write!(f, "{}", if self.read { "R" } else { "-" })?;
-        write!(f, "{}", if self.write { "W" } else { "-" })
+        write!(
+            f,
+            "{}",
+            match self.read {
+                0 => "-",
+                1 => "r",
+                _ => "R",
+            }
+        )?;
+        write!(
+            f,
+            "{}",
+            match self.write {
+                0 => "-",
+                1 => "w",
+                _ => "W",
+            }
+        )
     }
 }
 

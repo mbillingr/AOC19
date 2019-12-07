@@ -58,14 +58,14 @@ fn run_loop(phases: &[i64], prog: &[i64]) -> i64 {
     let mut c5 = IoComputer::with_io(&prog, r5.into_iter(), (s1.clone(), s0));
 
     let t1 = thread::spawn(move || {
-        while c1.step().unwrap() {}
+        c1.run_iocached();
         // need to read one more input when thread 1 is done, because otherwise thread 5 fails to write the final output
         c1.input.next().unwrap();
     });
-    let t2 = thread::spawn(move || while c2.step().unwrap() {});
-    let t3 = thread::spawn(move || while c3.step().unwrap() {});
-    let t4 = thread::spawn(move || while c4.step().unwrap() {});
-    let t5 = thread::spawn(move || while c5.step().unwrap() {});
+    let t2 = thread::spawn(move || c2.run_iocached().unwrap());
+    let t3 = thread::spawn(move || c3.run_iocached().unwrap());
+    let t4 = thread::spawn(move || c4.run_iocached().unwrap());
+    let t5 = thread::spawn(move || c5.run_iocached().unwrap());
 
     s1.send(phases[0]).unwrap();
     s2.send(phases[1]).unwrap();
@@ -155,5 +155,19 @@ mod tests {
             53, 1001, 56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10,
         ];
         assert_eq!(run_loop(&vec![9, 7, 8, 5, 6], &prog), 18216);
+    }
+
+    #[test]
+    fn analyze7_1() {
+        let input = vec![9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].into_iter();
+        let mut c = IoComputer::with_io(&INPUT, input, vec![]);
+        let mut cls = vec![Default::default(); INPUT.len()];
+        while c.classify_step(&mut cls).unwrap() {}
+
+        for (i, ((inp, c), mem)) in INPUT.iter().zip(cls).zip(&c.sr).enumerate() {
+            println!("{:4} {} {:4} -> {}", i, c, inp, mem);
+        }
+
+        println!("{:?}", c.output);
     }
 }
