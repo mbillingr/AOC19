@@ -287,6 +287,26 @@ impl Output for Vec<i64> {
     }
 }
 
+impl Output for mpsc::SyncSender<i64> {
+    fn init() -> Self {
+        unimplemented!()
+    }
+    fn write(&mut self, val: i64) {
+        self.send(val).unwrap()
+    }
+}
+
+impl<A: Output, B: Output> Output for (A, B) {
+    fn init() -> Self {
+        (A::init(), B::init())
+    }
+
+    fn write(&mut self, val: i64) {
+        self.0.write(val);
+        self.1.write(val);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
