@@ -11,7 +11,7 @@ fn main() {
         .read_to_string(&mut input)
         .unwrap();
 
-    let mut data: Vec<_> = input.bytes().filter(u8::is_ascii_digit).collect();
+    let data: Vec<_> = input.bytes().filter(u8::is_ascii_digit).collect();
 
     let depth = data.len() / (WIDTH * HEIGHT);
     assert_eq!(data.len(), depth * WIDTH * HEIGHT);
