@@ -1,5 +1,7 @@
 use std::ops;
 
+const MEMORY_SIZE: usize = 65535;
+
 pub trait Computable:
     Clone + From<i64> + ops::Add<Output = Self> + ops::Mul<Output = Self> + PartialEq + PartialOrd
 {
@@ -20,13 +22,17 @@ impl Computable for i64 {
 pub struct Computer<T: Computable> {
     pub sr: Vec<T>,
     pub pc: usize,
+    pub rel_base: isize,
 }
 
 impl<T: Computable> Computer<T> {
     pub fn new(program: &[i64]) -> Self {
+        let mut sr: Vec<_> = program.iter().cloned().map(T::from).collect();
+        sr.resize(MEMORY_SIZE, 0.into());
         Computer {
-            sr: program.iter().cloned().map(T::from).collect(),
+            sr,
             pc: 0,
+            rel_base: 0,
         }
     }
 
@@ -87,6 +93,9 @@ impl<T: Computable> Computer<T> {
                         0.into()
                     },
                 )?,
+                Op::Crb(a) => {
+                    self.rel_base += self.get(a)?.as_i64() as isize;
+                }
             }
         }
     }
@@ -122,6 +131,7 @@ impl<T: Computable> Computer<T> {
             6 => (Op::Jif(a()?, b()?), 3),
             7 => (Op::Ltn(a()?, b()?, c()?), 4),
             8 => (Op::Equ(a()?, b()?, c()?), 4),
+            9 => (Op::Crb(a()?), 2),
             99 => (Op::Halt, 1),
             //_ => panic!("Unknown opcode: {}", o),
             _ => return None,
@@ -132,6 +142,7 @@ impl<T: Computable> Computer<T> {
         match o {
             Operand::Imm(i) => Some(i),
             Operand::Pos(p) => self.sr.get(p).cloned(),
+            Operand::Rel(o) => self.sr.get((self.rel_base as isize + o) as usize).cloned(),
         }
     }
 
@@ -139,6 +150,10 @@ impl<T: Computable> Computer<T> {
         match o {
             Operand::Imm(_) => None,
             Operand::Pos(p) => self.sr.get_mut(p).map(|cell| *cell = val),
+            Operand::Rel(o) => self
+                .sr
+                .get_mut((self.rel_base as isize + o) as usize)
+                .map(|cell| *cell = val),
         }
     }
 }
@@ -160,6 +175,7 @@ pub enum Op<T: Computable> {
     Jif(Operand<T>, Operand<T>),
     Ltn(Operand<T>, Operand<T>, Operand<T>),
     Equ(Operand<T>, Operand<T>, Operand<T>),
+    Crb(Operand<T>),
     Halt,
 }
 
@@ -167,6 +183,7 @@ pub enum Op<T: Computable> {
 pub enum Operand<T: Computable> {
     Pos(usize),
     Imm(T),
+    Rel(isize),
 }
 
 impl<T: Computable> Operand<T> {
@@ -174,6 +191,7 @@ impl<T: Computable> Operand<T> {
         match flag {
             0 => Some(Operand::Pos(x.as_i64() as usize)),
             1 => Some(Operand::Imm(x)),
+            2 => Some(Operand::Rel(x.as_i64() as isize)),
             _ => None,
         }
     }
@@ -269,6 +287,28 @@ mod tests {
         run_program(&prog, &[7], &[999]);
         run_program(&prog, &[8], &[1000]);
         run_program(&prog, &[9], &[1001]);
+    }
+
+    #[test]
+    fn example9_1() {
+        let prog = vec![
+            109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99,
+        ];
+        run_program(&prog, &[], &prog);
+    }
+
+    #[test]
+    fn example9_2() {
+        let prog = vec![1102, 34915192, 34915192, 7, 4, 7, 99, 0];
+        let mut c = Computer::<i64>::new(&prog);
+        let (output, _) = c.map(std::iter::empty()).unwrap();
+        assert_eq!(output[0].to_string().len(), 16)
+    }
+
+    #[test]
+    fn example9_3() {
+        let prog = vec![104, 1125899906842624, 99];
+        run_program(&prog, &[], &[1125899906842624]);
     }
 
     fn run_program(prog: &[i64], input: &[i64], expected_output: &[i64]) {
