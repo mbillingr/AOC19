@@ -25,9 +25,9 @@ fn main() {
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             match robot.paint.get(&(x, y)) {
-                Some(Color::White) => print!("#"),
-                Some(Color::Black) => print!(" "),
-                None => print!(" "),
+                Some(Color::White) => print!("█"),
+                Some(Color::Black) => print!("▒"),
+                None => print!("░"),
             }
         }
         println!()
