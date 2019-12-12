@@ -1,3 +1,4 @@
+use common::gcd;
 use std::collections::{HashMap, HashSet};
 
 fn main() {
@@ -98,20 +99,6 @@ fn integer_positions(from: (i64, i64), to: (i64, i64)) -> impl Iterator<Item = (
     let g = gcd(d.0, d.1);
     let e = if g == 0 { (0, 0) } else { (d.0 / g, d.1 / g) };
     (1..=g).map(move |i| (from.0 + e.0 * i, from.1 + e.1 * i))
-}
-
-fn gcd(a: i64, b: i64) -> i64 {
-    let a = a.abs();
-    let b = b.abs();
-    let (mut a, mut b) = if a > b { (a, b) } else { (b, a) };
-
-    while b != 0 {
-        let r = a % b;
-        a = b;
-        b = r;
-    }
-
-    a
 }
 
 #[derive(Debug)]
