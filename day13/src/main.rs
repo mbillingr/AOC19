@@ -1,4 +1,4 @@
-use common::intcode2::{Computer, WhatsUp};
+use common::intcode2::{Computer, ComputerImpl, MemType, WhatsUp};
 use rand::{seq::SliceRandom, thread_rng};
 use std::collections::HashMap;
 
@@ -14,6 +14,8 @@ fn main() {
             .filter(|&&tile| tile == Tile::Block)
             .count()
     );
+
+    println!("...");
 
     search();
 }
@@ -41,7 +43,7 @@ fn search() {
 }
 
 fn run_sequence(seq: &[i64]) -> Status {
-    println!("trying sequence {:?}", seq);
+    //println!("trying sequence {:?}", seq);
     let mut game = Game::new();
     game.hack();
 
@@ -56,7 +58,7 @@ fn run_sequence(seq: &[i64]) -> Status {
 }
 
 struct Game {
-    vm: Computer<i64>,
+    vm: Computer,
     screen: HashMap<(i64, i64), Tile>,
     score: i64,
 
@@ -73,7 +75,7 @@ struct Game {
 impl Game {
     fn new() -> Self {
         Game {
-            vm: Computer::new(&INPUT),
+            vm: ComputerImpl::new(&INPUT),
             screen: HashMap::new(),
             score: 0,
 
@@ -326,3 +328,15 @@ const INPUT: [i64; 2720] = [
     92, 51, 69, 25, 44, 71, 75, 90, 21, 35, 54, 53, 28, 61, 68, 60, 82, 31, 3, 43, 93, 85, 4, 43,
     13, 31, 7, 44, 16, 31, 25, 93, 70, 42, 36, 58, 90, 63, 94, 30, 91, 2, 17, 16, 612378,
 ];
+
+#[cfg(test)]
+mod analyze {
+    use super::INPUT;
+    use common::intcode2::{ComputerImpl, Hooks};
+    use std::collections::HashMap;
+
+    #[test]
+    fn memory_usage() {
+        //let vm = ComputerImpl::<i64, MemAnalyzer>::new(&INPUT);
+    }
+}

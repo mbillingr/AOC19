@@ -22,7 +22,6 @@ fn main() {
 }
 
 fn find_independent_cycle(i: usize, moons: &mut [Moon]) -> usize {
-    let mut steps: usize = 0;
     let state0 = (
         moons[0].pos.get(i),
         moons[0].vel.get(i),
@@ -55,7 +54,6 @@ fn find_independent_cycle(i: usize, moons: &mut [Moon]) -> usize {
             } else {
                 panic!("cycle does not include initial position")
             }
-            steps = 0;
         }
     }
     steps

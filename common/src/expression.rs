@@ -120,25 +120,25 @@ impl std::fmt::Display for Expression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intcode2::Computer;
+    use crate::intcode2::ComputerImpl;
 
     #[test]
     fn expression_1() {
-        let mut c = Computer::<Expression>::new(&[4, 3, 99, 42]);
+        let mut c = ComputerImpl::<Expression, ()>::new(&[4, 3, 99, 42]);
         let (output, _) = c.map(std::iter::empty()).unwrap();
         assert_eq!(output, vec![Expression::Const(42)])
     }
 
     #[test]
     fn expression_2() {
-        let mut c = Computer::<Expression>::new(&[3, 5, 4, 5, 99, 42]);
+        let mut c = ComputerImpl::<Expression, ()>::new(&[3, 5, 4, 5, 99, 42]);
         let (output, _) = c.map(std::iter::once(Expression::Symbol("x"))).unwrap();
         assert_eq!(output, vec![Expression::Symbol("x")])
     }
 
     #[test]
     fn expression_3() {
-        let mut c = Computer::<Expression>::new(&[3, 9, 1, 9, 9, 9, 4, 9, 99, 42]);
+        let mut c = ComputerImpl::<Expression, ()>::new(&[3, 9, 1, 9, 9, 9, 4, 9, 99, 42]);
         let (output, _) = c.map(std::iter::once(Expression::Symbol("x"))).unwrap();
         assert_eq!(
             output,

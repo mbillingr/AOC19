@@ -1,6 +1,10 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops;
 
 const MEMORY_SIZE: usize = 65535;
+
+pub type Computer = ComputerImpl<i64, ()>;
 
 pub trait Computable:
     Clone + From<i64> + ops::Add<Output = Self> + ops::Mul<Output = Self> + PartialEq + PartialOrd
@@ -19,20 +23,65 @@ impl Computable for i64 {
     }
 }
 
-pub struct Computer<T: Computable> {
+pub trait Hooks: Default {
+    fn mem_fetch(&mut self, addr: usize);
+    fn mem_read(&mut self, addr: usize);
+    fn mem_write(&mut self, addr: usize);
+}
+
+impl Hooks for () {
+    fn mem_fetch(&mut self, _addr: usize) {}
+    fn mem_read(&mut self, _addr: usize) {}
+    fn mem_write(&mut self, _addr: usize) {}
+}
+
+pub enum MemType {
+    Op,
+    Read,
+    Write,
+}
+
+impl Hooks for HashMap<usize, MemType> {
+    fn mem_fetch(&mut self, addr: usize) {
+        match self.get(&addr) {
+            None => {
+                self.insert(addr, MemType::Op);
+            }
+            Some(MemType::Write) => println!("WARNING: executing mutated operation"),
+            _ => {}
+        }
+    }
+
+    fn mem_read(&mut self, addr: usize) {
+        match self.get(&addr) {
+            None => {
+                self.insert(addr, MemType::Read);
+            }
+            _ => {}
+        }
+    }
+
+    fn mem_write(&mut self, addr: usize) {
+        self.insert(addr, MemType::Write);
+    }
+}
+
+pub struct ComputerImpl<T: Computable, H: Hooks = ()> {
     pub sr: Vec<T>,
     pub pc: usize,
     pub rel_base: isize,
+    pub hooks: RefCell<H>,
 }
 
-impl<T: Computable> Computer<T> {
+impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
     pub fn new(program: &[i64]) -> Self {
         let mut sr: Vec<_> = program.iter().cloned().map(T::from).collect();
         sr.resize(MEMORY_SIZE, 0.into());
-        Computer {
+        ComputerImpl {
             sr,
             pc: 0,
             rel_base: 0,
+            hooks: RefCell::new(H::default()),
         }
     }
 
@@ -100,10 +149,22 @@ impl<T: Computable> Computer<T> {
         }
     }
 
-    fn fetch(&mut self) -> Option<Op<T>> {
+    pub fn fetch(&mut self) -> Option<Op<T>> {
+        self.hooks.borrow_mut().mem_fetch(self.pc);
         let (op, delta) = self.peek()?;
         self.pc += delta;
         Some(op)
+    }
+
+    fn mem_read(&self, index: usize) -> Option<T> {
+        self.hooks.borrow_mut().mem_read(index);
+        self.sr.get(index).cloned()
+    }
+
+    fn mem_write(&mut self, index: usize, value: T) -> Option<()> {
+        self.hooks.borrow_mut().mem_write(index);
+        *self.sr.get_mut(index)? = value;
+        Some(())
     }
 
     pub fn peek(&self) -> Option<(Op<T>, usize)> {
@@ -141,19 +202,16 @@ impl<T: Computable> Computer<T> {
     fn get(&self, o: Operand<T>) -> Option<T> {
         match o {
             Operand::Imm(i) => Some(i),
-            Operand::Pos(p) => self.sr.get(p).cloned(),
-            Operand::Rel(o) => self.sr.get((self.rel_base as isize + o) as usize).cloned(),
+            Operand::Pos(p) => self.mem_read(p),
+            Operand::Rel(o) => self.mem_read((self.rel_base as isize + o) as usize),
         }
     }
 
     fn set(&mut self, o: Operand<T>, val: T) -> Option<()> {
         match o {
             Operand::Imm(_) => None,
-            Operand::Pos(p) => self.sr.get_mut(p).map(|cell| *cell = val),
-            Operand::Rel(o) => self
-                .sr
-                .get_mut((self.rel_base as isize + o) as usize)
-                .map(|cell| *cell = val),
+            Operand::Pos(p) => self.mem_write(p, val),
+            Operand::Rel(o) => self.mem_write((self.rel_base as isize + o) as usize, val),
         }
     }
 }
@@ -165,7 +223,7 @@ pub enum WhatsUp<T> {
     Output(T),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Op<T: Computable> {
     Add(Operand<T>, Operand<T>, Operand<T>),
     Mul(Operand<T>, Operand<T>, Operand<T>),
@@ -212,7 +270,7 @@ mod tests {
             0,     // 14 : cnt
             0,     // 15 : cond
         ];
-        let mut c = Computer::<i64>::new(prog);
+        let mut c = Computer::new(prog);
         /*println!("{:?}", c.peek_at(0));
         println!("{:?}", c.peek_at(4));
         println!("{:?}", c.peek_at(6));
@@ -300,7 +358,7 @@ mod tests {
     #[test]
     fn example9_2() {
         let prog = vec![1102, 34915192, 34915192, 7, 4, 7, 99, 0];
-        let mut c = Computer::<i64>::new(&prog);
+        let mut c = Computer::new(&prog);
         let (output, _) = c.map(std::iter::empty()).unwrap();
         assert_eq!(output[0].to_string().len(), 16)
     }

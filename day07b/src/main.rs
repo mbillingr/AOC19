@@ -1,5 +1,5 @@
 use common::expression::Expression;
-use common::intcode2::Computer;
+use common::intcode2::ComputerImpl;
 use permute::permute;
 use std::collections::HashMap;
 
@@ -7,7 +7,7 @@ fn main() {
     use Expression::*;
     let mut amp_expressions = vec![];
     for phase in 0..=9 {
-        let mut c = Computer::new(&INPUT);
+        let mut c = ComputerImpl::<_, ()>::new(&INPUT);
         let (output, _) = c
             .map(std::iter::once(Const(phase)).chain(std::iter::repeat(Symbol("x"))))
             .unwrap();

@@ -35,7 +35,7 @@ fn main() {
 }
 
 struct Robot {
-    brain: Computer<i64>,
+    brain: Computer,
     direction: char,
     pos: (i64, i64),
     paint: HashMap<(i64, i64), Color>,
