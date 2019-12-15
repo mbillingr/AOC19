@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops;
 
-const MEMORY_SIZE: usize = 65535;
+pub const MEMORY_SIZE: usize = 65535;
 
 pub type Computer = ComputerImpl<i64, ()>;
 
@@ -106,6 +106,7 @@ impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
         loop {
             let pc = self.pc;
             match self.fetch()? {
+                Op::Invalid => return None,
                 Op::Halt => return Some(WhatsUp::Halt),
                 Op::Add(a, b, c) => self.set(c, self.get(a)? + self.get(b)?)?,
                 Op::Mul(a, b, c) => self.set(c, self.get(a)? * self.get(b)?)?,
@@ -196,23 +197,25 @@ impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
             9 => (Op::Crb(a()?), 2),
             99 => (Op::Halt, 1),
             //_ => panic!("Unknown opcode: {}", o),
-            _ => return None,
+            _ => (Op::Invalid, 0),
         })
     }
 
-    fn get(&self, o: Operand<T>) -> Option<T> {
+    pub fn get(&self, o: Operand<T>) -> Option<T> {
         match o {
             Operand::Imm(i) => Some(i),
             Operand::Pos(p) => self.mem_read(p),
             Operand::Rel(o) => self.mem_read((self.rel_base as isize + o) as usize),
+            Operand::Push | Operand::Pop => unimplemented!(),
         }
     }
 
-    fn set(&mut self, o: Operand<T>, val: T) -> Option<()> {
+    pub fn set(&mut self, o: Operand<T>, val: T) -> Option<()> {
         match o {
             Operand::Imm(_) => None,
             Operand::Pos(p) => self.mem_write(p, val),
             Operand::Rel(o) => self.mem_write((self.rel_base as isize + o) as usize, val),
+            Operand::Push | Operand::Pop => unimplemented!(),
         }
     }
 }
@@ -236,6 +239,7 @@ pub enum Op<T: Computable> {
     Equ(Operand<T>, Operand<T>, Operand<T>),
     Crb(Operand<T>),
     Halt,
+    Invalid,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -243,6 +247,8 @@ pub enum Operand<T: Computable> {
     Pos(usize),
     Imm(T),
     Rel(isize),
+    Pop,
+    Push,
 }
 
 impl<T: Computable> Operand<T> {
