@@ -1,4 +1,4 @@
-use common::intcode2::{Computer, ComputerImpl, MemType, WhatsUp};
+use common::intcode2::{Computer, ComputerImpl, WhatsUp};
 use rand::{seq::SliceRandom, thread_rng};
 use std::collections::HashMap;
 
@@ -329,7 +329,7 @@ const INPUT: [i64; 2720] = [
     13, 31, 7, 44, 16, 31, 25, 93, 70, 42, 36, 58, 90, 63, 94, 30, 91, 2, 17, 16, 612378,
 ];
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod analyze {
     use super::INPUT;
     use common::intcode2::{ComputerImpl, Hooks};
@@ -339,4 +339,4 @@ mod analyze {
     fn memory_usage() {
         //let vm = ComputerImpl::<i64, MemAnalyzer>::new(&INPUT);
     }
-}
+}*/
