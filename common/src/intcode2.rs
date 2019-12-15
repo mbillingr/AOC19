@@ -66,6 +66,7 @@ impl Hooks for HashMap<usize, MemType> {
     }
 }
 
+#[derive(Clone)]
 pub struct ComputerImpl<T: Computable, H: Hooks = ()> {
     pub sr: Vec<T>,
     pub pc: usize,
