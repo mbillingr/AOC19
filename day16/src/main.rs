@@ -13,7 +13,7 @@ fn main() {
 
     let n = seq.len();
     // the optimizations below and in iterate2 work only if we are not interested in the first half
-    // of the result.
+    // of the sequence.
     assert!(offset > n * 10000 / 2);
     let mut seq: Vec<_> = seq.into_iter().cycle().take(n * 10000).skip(offset).collect();
 
