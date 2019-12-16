@@ -27,10 +27,18 @@ fn analyze(intcode: &[i64]) {
 
     let labels = find_used_labels(labels, &ops);
     let blocks = cut_blocks(labels, &ops);
+    let blocks = sanitize_blocks(blocks);
 
-    println!("{:?}", blocks);
+    let mut block_labels: Vec<_> = blocks.keys().collect();
+    block_labels.sort();
 
-    //build_block(&ops);
+    for l in block_labels {
+        println!("{} {:?}", l, blocks[l])
+    }
+
+    //println!("{}", rustify(0, &blocks[&0], &blocks));
+    println!("***");
+    println!("{}", rustify(124, &blocks[&124], &blocks));
 }
 
 fn build_block(ops: &[FixOp]) -> Vec<String> {
@@ -68,12 +76,10 @@ fn find_used_labels(labels: Vec<usize>, ops: &[FixOp]) -> Vec<Option<usize>> {
     used.insert(0);
     for op in ops {
         match op {
-            FixOp::Jmp(label) => {
+            FixOp::Jit(_, label) | FixOp::Jif(_, label) | FixOp::Jmp(label) => {
                 used.insert(*label);
             }
-            FixOp::Jit(_, Imm(label))
-            | FixOp::Jif(_, Imm(label))
-            | FixOp::Set(Imm(label), Rel(0)) => {
+            FixOp::Set(Imm(label), Rel(0)) => {
                 used.insert(*label as usize);
             }
             _ => {}
@@ -96,9 +102,114 @@ fn cut_blocks(labels: Vec<Option<usize>>, ops: &[FixOp]) -> HashMap<usize, &[Fix
             label = *l;
         }
     }
-    blocks.insert(start, &ops[start..]);
+    blocks.insert(label, &ops[start..]);
 
     blocks
+}
+
+fn sanitize_blocks(blocks: HashMap<usize, &[FixOp]>) -> HashMap<usize, Vec<FixOp>> {
+    let mut block_labels: Vec<_> = blocks.keys().copied().collect();
+    block_labels.sort();
+
+    let mut result = HashMap::new();
+    for i in 0..block_labels.len() {
+        let label = block_labels[i];
+        let mut code: Vec<_> = blocks[&label].iter().cloned().collect();
+
+        while let Some(FixOp::Invalid) = code.last() {
+            code.pop();
+        }
+
+        match code.last() {
+            None => {}
+            Some(FixOp::Halt) => {}
+            Some(FixOp::Jmp(j)) if *j < i => {
+                // assume a back-jump is always a loop
+                let new = vec![FixOp::Loop].join(result.remove(j).unwrap());
+                result.insert(*j, new);
+            }
+            Some(FixOp::Jmp(_)) => {}
+            _ => code.push(FixOp::Jmp(block_labels[i + 1])),
+        }
+
+        result.insert(label, code);
+    }
+
+    result
+}
+
+fn rustify(current_label: usize, code: &[FixOp], blocks: &HashMap<usize, Vec<FixOp>>) -> String {
+    use FixOp::*;
+    use Operand::*;
+
+    if code.is_empty() {
+        return String::new();
+    }
+
+    (match &code[0] {
+        Loop => "loop {".to_string(),
+        Halt => "halt();".to_string(),
+        Inp(x) => format!("{} = input();", build_operand(x)),
+        Out(a) => format!("output({});", build_operand(a)),
+        Add(a, b, c) => format!(
+            "{} = {} + {};",
+            build_operand(c),
+            build_operand(a),
+            build_operand(b)
+        ),
+        Mul(a, b, c) => format!(
+            "{} = {} * {};",
+            build_operand(c),
+            build_operand(a),
+            build_operand(b)
+        ),
+        Equ(a, b, c) => format!(
+            "{} = {} == {};",
+            build_operand(c),
+            build_operand(a),
+            build_operand(b)
+        ),
+        Set(a, c) => format!("{} = {};", build_operand(c), build_operand(a)),
+        Jit(a, label) => return rustify_branch(*a, "!=", *label, current_label, code, blocks),
+
+        Jif(a, label) => return rustify_branch(*a, "==", *label, current_label, code, blocks),
+
+        Dynamic(op) => format!("dynamic({:?})", op),
+
+        Jmp(label) if *label > current_label => format!("JMP {}", label),
+        Jmp(label) if *label < current_label => format!("}}  // {:?}", label),
+        op => unimplemented!("{:?}", op),
+    }) + "\n"
+        + &rustify(current_label, &code[1..], blocks)
+}
+
+fn rustify_branch(
+    operand: Operand<i64>,
+    cmp: &str,
+    label: usize,
+    current_label: usize,
+    code: &[FixOp],
+    blocks: &HashMap<usize, Vec<FixOp>>,
+) -> String {
+    use FixOp::*;
+
+    let exit = if let Jmp(x) = blocks[&label].last().unwrap() {
+        println!("{} -> {}", label, x);
+        assert!(*x > label);
+        *x
+    } else {
+        panic!("no jump at branch end");
+    };
+    let consequence = rustify(label, &blocks[&label], blocks);
+    let alternative = rustify(current_label, &code[1..], blocks);
+    let ifpart = format!(
+        "if {} != 0 {{\n{}\n}} else {{\n{}\n}}",
+        build_operand(&operand),
+        consequence,
+        alternative
+    );
+
+    ifpart + "\n" + &rustify(exit, &blocks[&exit], blocks)
 }
 
 fn transform(ops: Vec<FixOp>) -> Vec<FixOp> {
@@ -110,8 +221,8 @@ fn transform(ops: Vec<FixOp>) -> Vec<FixOp> {
             Mul(Imm(a), Imm(b), c) => Set(Imm(a * b), c),
             Add(a, Imm(0), c) | Add(Imm(0), a, c) => Set(a, c),
             Mul(a, Imm(1), c) | Mul(Imm(1), a, c) => Set(a, c),
-            Jit(Imm(1), Imm(p)) => FixOp::Jmp(p as usize),
-            Jif(Imm(0), Imm(p)) => FixOp::Jmp(p as usize),
+            Jit(Imm(1), p) => Jmp(p as usize),
+            Jif(Imm(0), p) => Jmp(p as usize),
             _ => op,
         })
         .collect()
@@ -168,8 +279,9 @@ impl Analyzer {
                 Op::Out(a) => FixOp::Out(a),
                 Op::Equ(a, b, c) => FixOp::Equ(a, b, c),
                 Op::Ltn(a, b, c) => FixOp::Ltn(a, b, c),
-                Op::Jit(a, b) => FixOp::Jit(a, b),
-                Op::Jif(a, b) => FixOp::Jif(a, b),
+                Op::Jit(a, Operand::Imm(b)) => FixOp::Jit(a, b as usize),
+                Op::Jif(a, Operand::Imm(b)) => FixOp::Jif(a, b as usize),
+                Op::Jit(_, _) | Op::Jif(_, _) => unimplemented!(),
                 Op::Crb(a) => FixOp::Crb(a),
             };
 
@@ -195,9 +307,9 @@ impl Analyzer {
                     self.vm.pc = p;
                 }
                 FixOp::Jit(_, b) | FixOp::Jif(_, b) => {
-                    assert!(self.mark_constant(b).is_none());
+                    //assert!(self.mark_constant(b).is_none());
                     let vm = self.vm.clone();
-                    self.vm.pc = self.get(b) as usize;
+                    self.vm.pc = b;
                     let branch = self.walk();
                     self.vm = vm;
                 }
@@ -272,8 +384,8 @@ enum FixOp {
     Mul(Operand<i64>, Operand<i64>, Operand<i64>),
     Inp(Operand<i64>),
     Out(Operand<i64>),
-    Jit(Operand<i64>, Operand<i64>),
-    Jif(Operand<i64>, Operand<i64>),
+    Jit(Operand<i64>, usize),
+    Jif(Operand<i64>, usize),
     Ltn(Operand<i64>, Operand<i64>, Operand<i64>),
     Equ(Operand<i64>, Operand<i64>, Operand<i64>),
     Crb(Operand<i64>),
@@ -282,7 +394,19 @@ enum FixOp {
     Jmp(usize),
     Jr0,
     Dynamic(Op<i64>),
+    Loop,
     Unknown,
+}
+
+trait Join {
+    fn join(self, rhs: Self) -> Self;
+}
+
+impl<T> Join for Vec<T> {
+    fn join(mut self, rhs: Self) -> Self {
+        self.extend(rhs);
+        self
+    }
 }
 
 #[cfg(test)]
