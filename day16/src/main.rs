@@ -1,50 +1,52 @@
-use std::collections::HashMap;
-
 fn main() {
-    /*let mut seq = get_input(INPUT);
+    let mut seq = get_input(INPUT);
     for _ in 0..100 {
         seq = iterate(seq);
     }
-    println!("Part 1: {}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());*/
+    println!("Part 1: {}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());
 
 
-    /*let mut seq = get_input(INPUT);
+    let input = INPUT;
+
+    let seq = get_input(input);
+    let offset: usize = input[..7].parse().unwrap();
+
     let n = seq.len();
-    let mut seq = seq.into_iter().cycle().take(n * 10000).collect();
-    for i in 0..100 {
-        seq = iterate(seq);
-        println!("{}", i);
+    // the optimizations below and in iterate2 work only if we are not interested in the first half
+    // of the result.
+    assert!(offset > n * 10000 / 2);
+    let mut seq: Vec<_> = seq.into_iter().cycle().take(n * 10000).skip(offset).collect();
+
+    for _ in 0..100 {
+        seq = iterate2(seq);
     }
-    println!("{}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());
-    let offset: usize = seq[..7].iter().map(|x| x.to_string()).collect::<String>().parse().unwrap();
-    println!("Part 2: {}", seq[offset..offset+8].iter().map(|x| x.to_string()).collect::<String>());*/
-
-    let mut seq = get_input("123");
-    let n = seq.len();
-    let mut seq: Vec<_> = seq.into_iter().cycle().take(n * 10).collect();
-    seq = iterate(seq);
-    println!("{:?}", seq);
+    println!("Part 2: {}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());
 }
 
-fn iterate2(sequence: Vec<i32>) -> Vec<i32> {
+fn iterate2(mut sequence: Vec<i64>) -> Vec<i64> {
+    // assume we are only looking the second part of the signal, where the pattern is
+    // always 0s followed by 1s...
+    let n = sequence.len();
+    let mut sum = 0;
+    for i in (0..n).rev() {
+        sum += sequence[i];
+        sequence[i] = sum.abs() % 10;
+    }
+    sequence
+}
+
+fn get_input(input: &str) -> Vec<i64> {
+    input.bytes().map(|i| (i - b'0') as i64).collect()
+}
+
+fn iterate(sequence: Vec<i64>) -> Vec<i64> {
     let n = sequence.len();
     (1..=n)
-        .map(|i| pattern(i).zip(&sequence).map(|(p, x)| (p * *x)).sum::<i32>().abs() % 10)
+        .map(|i| pattern(i).zip(&sequence).map(|(p, x)| (p * *x)).sum::<i64>().abs() % 10)
         .collect()
 }
 
-fn get_input(input: &str) -> Vec<i32> {
-    input.bytes().map(|i| (i - b'0') as i32).collect()
-}
-
-fn iterate(sequence: Vec<i32>) -> Vec<i32> {
-    let n = sequence.len();
-    (1..=n)
-        .map(|i| pattern(i).zip(&sequence).map(|(p, x)| (p * *x)).sum::<i32>().abs() % 10)
-        .collect()
-}
-
-fn pattern(n: usize) -> impl Iterator<Item = i32> {
+fn pattern(n: usize) -> impl Iterator<Item = i64> {
     let a = std::iter::repeat(0).take(n);
     let b = std::iter::repeat(1).take(n);
     let c = std::iter::repeat(0).take(n);
