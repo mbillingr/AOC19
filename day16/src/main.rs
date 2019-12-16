@@ -3,8 +3,10 @@ fn main() {
     for _ in 0..100 {
         seq = iterate(seq);
     }
-    println!("Part 1: {}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());
-
+    println!(
+        "Part 1: {}",
+        seq[..8].iter().map(|x| x.to_string()).collect::<String>()
+    );
 
     let input = INPUT;
 
@@ -15,12 +17,20 @@ fn main() {
     // the optimizations below and in iterate2 work only if we are not interested in the first half
     // of the sequence.
     assert!(offset > n * 10000 / 2);
-    let mut seq: Vec<_> = seq.into_iter().cycle().take(n * 10000).skip(offset).collect();
+    let mut seq: Vec<_> = seq
+        .into_iter()
+        .cycle()
+        .take(n * 10000)
+        .skip(offset)
+        .collect();
 
     for _ in 0..100 {
         seq = iterate2(seq);
     }
-    println!("Part 2: {}", seq[..8].iter().map(|x| x.to_string()).collect::<String>());
+    println!(
+        "Part 2: {}",
+        seq[..8].iter().map(|x| x.to_string()).collect::<String>()
+    );
 }
 
 fn iterate2(mut sequence: Vec<i64>) -> Vec<i64> {
@@ -42,7 +52,14 @@ fn get_input(input: &str) -> Vec<i64> {
 fn iterate(sequence: Vec<i64>) -> Vec<i64> {
     let n = sequence.len();
     (1..=n)
-        .map(|i| pattern(i).zip(&sequence).map(|(p, x)| (p * *x)).sum::<i64>().abs() % 10)
+        .map(|i| {
+            pattern(i)
+                .zip(&sequence)
+                .map(|(p, x)| (p * *x))
+                .sum::<i64>()
+                .abs()
+                % 10
+        })
         .collect()
 }
 
