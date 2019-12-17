@@ -2,7 +2,7 @@ use common::intcode2::Computer;
 use std::collections::HashMap;
 
 fn main() {
-    let (output, _) = Computer::new(&INPUT).map(std::iter::empty()).unwrap();
+    let output = Computer::new(&INPUT).map(std::iter::empty()).unwrap();
 
     let output: String =
         String::from_utf8(output.into_iter().map(|o| o as u8).collect::<Vec<u8>>()).unwrap();
@@ -69,7 +69,7 @@ fn main() {
     program += "n\n";
 
     let mut comp = Computer::new(&prog2);
-    let (mut output, _) = comp.map(program.bytes().map(|b| b as _)).unwrap();
+    let mut output = comp.map(program.bytes().map(|b| b as _)).unwrap();
 
     let dust = output.pop().unwrap();
 

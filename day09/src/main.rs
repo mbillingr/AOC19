@@ -1,11 +1,11 @@
 use common::intcode2::Computer;
 
 fn main() {
-    let (output, _) = Computer::new(&INPUT).map(std::iter::once(1)).unwrap();
+    let output = Computer::new(&INPUT).map(std::iter::once(1)).unwrap();
 
     println!("Part 1: {:?}", output);
 
-    let (output, _) = Computer::new(&INPUT).map(std::iter::once(2)).unwrap();
+    let output = Computer::new(&INPUT).map(std::iter::once(2)).unwrap();
 
     println!("Part 2: {:?}", output);
 }

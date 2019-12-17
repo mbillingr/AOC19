@@ -3,6 +3,7 @@ pub mod expression;
 pub mod intcode;
 pub mod intcode2;
 pub mod intcode_decompile;
+pub mod intcode_jit;
 
 pub fn gcd(a: i64, b: i64) -> i64 {
     let a = a.abs();

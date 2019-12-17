@@ -1,10 +1,13 @@
 use crate::intcode2::{Computer, Op, Operand, MEMORY_SIZE};
+use crate::intcode_decompile::FixOp::Dynamic;
+use crate::intcode_jit::{Compiler, CompilerContext, IntcodeProgram};
 use std::collections::{HashMap, HashSet};
 
-fn analyze(intcode: &[i64]) {
+pub fn compile(intcode: &[i64]) -> IntcodeProgram {
     let mut alz = Analyzer {
         mem: vec![CellType::Unknown; MEMORY_SIZE],
         compiled: HashMap::new(),
+        op_sizes: HashMap::new(),
         vm: Computer::new(intcode),
     };
 
@@ -32,13 +35,12 @@ fn analyze(intcode: &[i64]) {
     let mut block_labels: Vec<_> = blocks.keys().collect();
     block_labels.sort();
 
-    for l in block_labels {
-        println!("{} {:?}", l, blocks[l])
-    }
-
     //println!("{}", rustify(0, &blocks[&0], &blocks));
-    println!("***");
-    println!("{}", rustify(124, &blocks[&124], &blocks));
+    //println!("***");
+    //println!("{}", rustify(124, &blocks[&124], &blocks));
+
+    let mut ctx = CompilerContext::new();
+    ctx.compile_program(&blocks)
 }
 
 fn build_block(ops: &[FixOp]) -> Vec<String> {
@@ -56,7 +58,6 @@ fn build_block(ops: &[FixOp]) -> Vec<String> {
             ),
             _ => unimplemented!("{:?}", op),
         };
-        println!("{}", c);
         code.push(c);
     }
     code
@@ -123,6 +124,7 @@ fn sanitize_blocks(blocks: HashMap<usize, &[FixOp]>) -> HashMap<usize, Vec<FixOp
         match code.last() {
             None => {}
             Some(FixOp::Halt) => {}
+            Some(FixOp::Jr0) => {}
             Some(FixOp::Jmp(j)) if *j < i => {
                 // assume a back-jump is always a loop
                 let new = vec![FixOp::Loop].join(result.remove(j).unwrap());
@@ -238,6 +240,7 @@ enum CellType {
 struct Analyzer {
     mem: Vec<CellType>,
     compiled: HashMap<usize, FixOp>,
+    op_sizes: HashMap<usize, usize>,
     vm: Computer,
 }
 
@@ -264,8 +267,11 @@ impl Analyzer {
 
             let fop = match op {
                 _ if dynamic => match op {
-                    Op::Jit(_, _) | Op::Jif(_, _) => panic!("please, no dynamic jumps!"),
-                    _ => FixOp::Dynamic(op),
+                    Op::Jit(_, _) | Op::Jif(_, _) => {
+                        println!("please, no dynamic jumps!");
+                        FixOp::Dynamic(pc)
+                    }
+                    _ => FixOp::Dynamic(pc),
                 },
                 Op::Jit(Operand::Imm(1), Operand::Rel(0)) => FixOp::Jr0,
                 Op::Jif(Operand::Imm(0), Operand::Rel(0)) => FixOp::Jr0,
@@ -282,13 +288,16 @@ impl Analyzer {
                 Op::Jit(a, Operand::Imm(b)) => FixOp::Jit(a, b as usize),
                 Op::Jif(a, Operand::Imm(b)) => FixOp::Jif(a, b as usize),
                 Op::Jit(_, _) | Op::Jif(_, _) => unimplemented!(),
-                Op::Crb(a) => FixOp::Crb(a),
+
+                // unimplemented stuff... fall back to dynamic evaluation
+                Op::Crb(_) => FixOp::Dynamic(pc),
+                //Op::Crb(a) => FixOp::Crb(a),
             };
 
-            println!("{:4}  {:?}", pc, fop);
+            //println!("{:4}  {:?}", pc, fop);
 
-            //ops.push(fop.clone());
             self.compiled.insert(pc, fop.clone());
+            self.op_sizes.insert(pc, delta);
 
             match fop {
                 FixOp::Halt | FixOp::Jr0 | FixOp::Invalid => return,
@@ -324,7 +333,12 @@ impl Analyzer {
     }
 
     fn force_mut(&mut self, pos: usize) {
-        unimplemented!()
+        let p = *self.compiled.keys().filter(|&&k| k <= pos).max().unwrap();
+        let fop = self.compiled.get_mut(&p).unwrap();
+
+        if pos >= p && pos < p + self.op_sizes[&p] {
+            *fop = FixOp::Dynamic(p);
+        }
     }
 
     fn get(&self, o: Operand<i64>) -> i64 {
@@ -341,7 +355,7 @@ impl Analyzer {
             Operand::Imm(_) => {}
             Operand::Pos(p) => {
                 if self.mem[p] == CellType::Mutable {
-                    eprintln!("Memory location {} cannot be both, mutable and constant", p);
+                    //eprintln!("Memory location {} cannot be both, mutable and constant", p);
                     return Some(p);
                 } else {
                     self.mem[p] = CellType::Constant;
@@ -361,7 +375,7 @@ impl Analyzer {
             Operand::Pos(p) => {
                 if self.mem[p] == CellType::Constant {
                     self.mem[p] = CellType::Mutable;
-                    eprintln!("Memory location {} cannot be both, mutable and constant", p);
+                    //eprintln!("Memory location {} cannot be both, mutable and constant", p);
                     return Some(p);
                 } else {
                     self.mem[p] = CellType::Mutable;
@@ -377,7 +391,7 @@ impl Analyzer {
 }
 
 #[derive(Debug, Clone)]
-enum FixOp {
+pub enum FixOp {
     Invalid,
     Halt,
     Add(Operand<i64>, Operand<i64>, Operand<i64>),
@@ -393,7 +407,7 @@ enum FixOp {
     Set(Operand<i64>, Operand<i64>),
     Jmp(usize),
     Jr0,
-    Dynamic(Op<i64>),
+    Dynamic(usize),
     Loop,
     Unknown,
 }
@@ -411,12 +425,28 @@ impl<T> Join for Vec<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::intcode_decompile::analyze;
+    use super::*;
 
     #[test]
     fn analysis1() {
-        analyze(&INPUT15);
+        let code = &INPUT02;
+        let prog = compile(code);
+
+        let mut vm = Computer::new(code);
+        let sr = &mut vm.sr[0] as *mut _;
+        prog(&mut vm, sr);
     }
+
+    const INPUT: [i64; 6] = [1, 1, 2, 5, 99, 0];
+
+    const INPUT02: [i64; 129] = [
+        1, 12, 2, 3, 1, 1, 2, 3, 1, 3, 4, 3, 1, 5, 0, 3, 2, 13, 1, 19, 1, 6, 19, 23, 2, 23, 6, 27,
+        1, 5, 27, 31, 1, 10, 31, 35, 2, 6, 35, 39, 1, 39, 13, 43, 1, 43, 9, 47, 2, 47, 10, 51, 1,
+        5, 51, 55, 1, 55, 10, 59, 2, 59, 6, 63, 2, 6, 63, 67, 1, 5, 67, 71, 2, 9, 71, 75, 1, 75, 6,
+        79, 1, 6, 79, 83, 2, 83, 9, 87, 2, 87, 13, 91, 1, 10, 91, 95, 1, 95, 13, 99, 2, 13, 99,
+        103, 1, 103, 10, 107, 2, 107, 10, 111, 1, 111, 9, 115, 1, 115, 2, 119, 1, 9, 119, 0, 99, 2,
+        0, 14, 0,
+    ];
 
     const INPUT15: [i64; 1045] = [
         3, 1033, 1008, 1033, 1, 1032, 1005, 1032, 31, 1008, 1033, 2, 1032, 1005, 1032, 58, 1008,

@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4"
+cranelift = "0.51"
+cranelift-module = "0.51"
+cranelift-simplejit = "0.51"

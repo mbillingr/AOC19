@@ -8,8 +8,8 @@ fn main() {
     let mut amp_expressions = vec![];
     for phase in 0..=9 {
         let mut c = ComputerImpl::<_, ()>::new(&INPUT);
-        let (output, _) = c
-            .map(std::iter::once(Const(phase)).chain(std::iter::repeat(Symbol("x"))))
+        let output = c
+            .map(std::iter::once(Const(phase)).chain(std::iter::repeat(Symbol("x")).take(1000)))
             .unwrap();
         amp_expressions.push(output);
     }

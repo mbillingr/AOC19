@@ -1,5 +1,6 @@
+use crate::intcode_decompile::compile;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ops;
 
 pub const MEMORY_SIZE: usize = 65535;
@@ -72,6 +73,21 @@ pub struct ComputerImpl<T: Computable, H: Hooks = ()> {
     pub pc: usize,
     pub rel_base: isize,
     pub hooks: RefCell<H>,
+    next_input: VecDeque<T>,
+}
+
+impl ComputerImpl<i64, ()> {
+    pub fn map_jit(&mut self, mut input: impl Iterator<Item = i64>) -> Option<Vec<i64>> {
+        let mut output = vec![];
+        self.next_input = input.collect();
+        let prog = compile(self.sr.as_slice());
+
+        let mem = &mut self.sr[0] as *mut _;
+
+        prog(self, mem);
+
+        Some(output)
+    }
 }
 
 impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
@@ -83,72 +99,88 @@ impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
             pc: 0,
             rel_base: 0,
             hooks: RefCell::new(H::default()),
+            next_input: VecDeque::new(),
         }
     }
 
-    pub fn map(
-        &mut self,
-        mut input: impl Iterator<Item = T>,
-    ) -> Option<(Vec<T>, impl Iterator<Item = T>)> {
+    pub fn map(&mut self, mut input: impl Iterator<Item = T>) -> Option<Vec<T>> {
         let mut output = vec![];
-        let mut next_input = None;
+        self.next_input = input.collect();
         loop {
-            match self.run(next_input.take())? {
+            match self.run(None)? {
                 WhatsUp::Halt => break,
-                WhatsUp::NeedInput => next_input = Some(input.next().expect("out of input values")),
+                WhatsUp::NeedInput => panic!("out of input values"),
                 WhatsUp::Output(x) => output.push(x),
             }
         }
-        Some((output, input))
+        Some(output)
     }
 
     pub fn run(&mut self, mut input: Option<T>) -> Option<WhatsUp<T>> {
+        self.next_input.extend(input);
         loop {
             let pc = self.pc;
-            match self.fetch()? {
-                Op::Invalid => return None,
-                Op::Halt => return Some(WhatsUp::Halt),
-                Op::Add(a, b, c) => self.set(c, self.get(a)? + self.get(b)?)?,
-                Op::Mul(a, b, c) => self.set(c, self.get(a)? * self.get(b)?)?,
-                Op::Inp(a) => match input.take() {
-                    Some(x) => self.set(a, x)?,
-                    None => {
-                        self.pc = pc;
-                        return Some(WhatsUp::NeedInput);
-                    }
-                },
-                Op::Out(a) => return Some(WhatsUp::Output(self.get(a)?)),
-                Op::Jit(a, b) => {
-                    if self.get(a)?.as_i64() != 0 {
-                        self.pc = self.get(b)?.as_i64() as usize;
-                    }
+            let op = self.fetch()?;
+            match self.apply(op) {
+                None => {}
+                Some(Some(WhatsUp::NeedInput)) => {
+                    self.pc = pc;
+                    return Some(WhatsUp::NeedInput);
                 }
-                Op::Jif(a, b) => {
-                    if self.get(a)?.as_i64() == 0 {
-                        self.pc = self.get(b)?.as_i64() as usize;
-                    }
-                }
-                Op::Equ(a, b, c) => self.set(
-                    c,
-                    if self.get(a)? == self.get(b)? {
-                        1.into()
-                    } else {
-                        0.into()
-                    },
-                )?,
-                Op::Ltn(a, b, c) => self.set(
-                    c,
-                    if self.get(a)? < self.get(b)? {
-                        1.into()
-                    } else {
-                        0.into()
-                    },
-                )?,
-                Op::Crb(a) => {
-                    self.rel_base += self.get(a)?.as_i64() as isize;
-                }
+                Some(r) => return r,
             }
         }
+    }
+
+    pub fn apply(&mut self, op: Op<T>) -> Option<Option<WhatsUp<T>>> {
+        match op {
+            Op::Invalid => return Some(None),
+            Op::Halt => return Some(Some(WhatsUp::Halt)),
+            Op::Add(a, b, c) => self.set(c, self.get(a)? + self.get(b)?)?,
+            Op::Mul(a, b, c) => self.set(c, self.get(a)? * self.get(b)?)?,
+            Op::Inp(a) => match self.next_input() {
+                Some(x) => self.set(a, x)?,
+                None => {
+                    //self.pc = pc;
+                    return Some(Some(WhatsUp::NeedInput));
+                }
+            },
+            Op::Out(a) => return Some(Some(WhatsUp::Output(self.get(a)?))),
+            Op::Jit(a, b) => {
+                if self.get(a)?.as_i64() != 0 {
+                    self.pc = self.get(b)?.as_i64() as usize;
+                }
+            }
+            Op::Jif(a, b) => {
+                if self.get(a)?.as_i64() == 0 {
+                    self.pc = self.get(b)?.as_i64() as usize;
+                }
+            }
+            Op::Equ(a, b, c) => self.set(
+                c,
+                if self.get(a)? == self.get(b)? {
+                    1.into()
+                } else {
+                    0.into()
+                },
+            )?,
+            Op::Ltn(a, b, c) => self.set(
+                c,
+                if self.get(a)? < self.get(b)? {
+                    1.into()
+                } else {
+                    0.into()
+                },
+            )?,
+            Op::Crb(a) => {
+                self.rel_base += self.get(a)?.as_i64() as isize;
+            }
+        };
+        None
+    }
+
+    pub fn next_input(&mut self) -> Option<T> {
+        self.next_input.pop_front()
     }
 
     pub fn fetch(&mut self) -> Option<Op<T>> {
@@ -174,31 +206,7 @@ impl<T: Computable, H: Hooks> ComputerImpl<T, H> {
     }
 
     pub fn peek_at(&self, i: usize) -> Option<(Op<T>, usize)> {
-        let op = self.sr[i].as_i64();
-        let o = op % 100;
-        let fa = (op / 100) % 10;
-        let fb = (op / 1000) % 10;
-        let fc = (op / 10000) % 10;
-        let a = self.sr.get(i + 1).cloned().unwrap_or(T::invalid());
-        let b = self.sr.get(i + 2).cloned().unwrap_or(T::invalid());
-        let c = self.sr.get(i + 3).cloned().unwrap_or(T::invalid());
-        let a = || Operand::new(fa, a);
-        let b = || Operand::new(fb, b);
-        let c = || Operand::new(fc, c);
-        Some(match o {
-            1 => (Op::Add(a()?, b()?, c()?), 4),
-            2 => (Op::Mul(a()?, b()?, c()?), 4),
-            3 => (Op::Inp(a()?), 2),
-            4 => (Op::Out(a()?), 2),
-            5 => (Op::Jit(a()?, b()?), 3),
-            6 => (Op::Jif(a()?, b()?), 3),
-            7 => (Op::Ltn(a()?, b()?, c()?), 4),
-            8 => (Op::Equ(a()?, b()?, c()?), 4),
-            9 => (Op::Crb(a()?), 2),
-            99 => (Op::Halt, 1),
-            //_ => panic!("Unknown opcode: {}", o),
-            _ => (Op::Invalid, 0),
-        })
+        Op::from_memory(&self.sr[i..])
     }
 
     pub fn get(&self, o: Operand<T>) -> Option<T> {
@@ -242,6 +250,36 @@ pub enum Op<T: Computable> {
     Invalid,
 }
 
+impl<T: Computable> Op<T> {
+    pub fn from_memory(sr: &[T]) -> Option<(Self, usize)> {
+        let op = sr[0].as_i64();
+        let o = op % 100;
+        let fa = (op / 100) % 10;
+        let fb = (op / 1000) % 10;
+        let fc = (op / 10000) % 10;
+        let a = sr.get(1).cloned().unwrap_or(T::invalid());
+        let b = sr.get(2).cloned().unwrap_or(T::invalid());
+        let c = sr.get(3).cloned().unwrap_or(T::invalid());
+        let a = || Operand::new(fa, a);
+        let b = || Operand::new(fb, b);
+        let c = || Operand::new(fc, c);
+        Some(match o {
+            1 => (Op::Add(a()?, b()?, c()?), 4),
+            2 => (Op::Mul(a()?, b()?, c()?), 4),
+            3 => (Op::Inp(a()?), 2),
+            4 => (Op::Out(a()?), 2),
+            5 => (Op::Jit(a()?, b()?), 3),
+            6 => (Op::Jif(a()?, b()?), 3),
+            7 => (Op::Ltn(a()?, b()?, c()?), 4),
+            8 => (Op::Equ(a()?, b()?, c()?), 4),
+            9 => (Op::Crb(a()?), 2),
+            99 => (Op::Halt, 1),
+            //_ => panic!("Unknown opcode: {}", o),
+            _ => (Op::Invalid, 0),
+        })
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum Operand<T: Computable> {
     Pos(usize),
@@ -283,7 +321,7 @@ mod tests {
         println!("{:?}", c.peek_at(6));
         println!("{:?}", c.peek_at(10));
         println!("{:?}", c.peek_at(13));*/
-        let (output, _) = c.map(std::iter::empty()).unwrap();
+        let output = c.map(std::iter::empty()).unwrap();
         assert_eq!(output, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
 
@@ -366,7 +404,7 @@ mod tests {
     fn example9_2() {
         let prog = vec![1102, 34915192, 34915192, 7, 4, 7, 99, 0];
         let mut c = Computer::new(&prog);
-        let (output, _) = c.map(std::iter::empty()).unwrap();
+        let output = c.map(std::iter::empty()).unwrap();
         assert_eq!(output[0].to_string().len(), 16)
     }
 
@@ -378,7 +416,7 @@ mod tests {
 
     fn run_program(prog: &[i64], input: &[i64], expected_output: &[i64]) {
         let mut c = Computer::new(prog);
-        let (output, _) = c.map(input.iter().cloned()).unwrap();
+        let output = c.map(input.iter().cloned()).unwrap();
         assert_eq!(output, expected_output);
     }
 }
