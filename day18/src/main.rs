@@ -1,6 +1,6 @@
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::Read;
-use std::collections::{HashMap, HashSet, VecDeque};
 
 fn main() {
     let mut input = String::new();
@@ -11,26 +11,170 @@ fn main() {
 
     let (map, start_pos) = parse_map(&input);
 
-    build_mapgraph(start_pos, &map);
+    let edges = build_mapgraph(start_pos, &map);
+
+    let mut part1 = Part1::new(edges);
+    part1.backtrack(vec![Tile::Start]);
+    println!("{:?}", part1.solutions);
 }
 
 struct Part1 {
-    map: HashMap<(Tile, Tile), usize>,
+    //map: HashMap<(Tile, Tile), usize>,
+    map: HashMap<Tile, Vec<(Tile, usize)>>,
+    all_keys: HashSet<Tile>,
     solutions: Vec<Vec<Tile>>,
+    minlen: usize,
 }
 
 impl Part1 {
-    fn backtrack(&mut self, candidate: Vec<Tile>) {
-        if self.reject(self, &candidate) {
-            return
+    fn new(map: HashMap<Tile, Vec<(Tile, usize)>>) -> Self {
+        Part1 {
+            all_keys: map
+                .keys()
+                .filter(|a| match a {
+                    Tile::Key(_) => true,
+                    Tile::Start => true,
+                    _ => false,
+                })
+                .copied()
+                .collect(),
+            map,
+            solutions: vec![],
+            minlen: usize::max_value(),
         }
-        if self.accept(self, &candidate) {
+    }
+
+    fn pathlen(&self, candidate: &[Tile]) -> usize {
+        (1..candidate.len())
+            .map(|i| {
+                self.dijkstra_search(candidate[i], candidate[i - 1], &candidate[..=i])
+                    .unwrap()
+            })
+            .sum()
+    }
+
+    fn backtrack(&mut self, candidate: Vec<Tile>) {
+        if self.reject(&candidate) {
+            return;
+        }
+        if self.accept(&candidate) {
+            let len = self.pathlen(&candidate);
+            if len < self.minlen {
+                println!("solution: {} {:?}", len, candidate);
+                self.minlen = len;
+            }
             self.solutions.push(candidate.clone())
         }
+        for s in self.extensions(candidate) {
+            self.backtrack(s)
+        }
+    }
+
+    fn reject(&self, candidate: &[Tile]) -> bool {
+        let n = candidate.len();
+        if n < 2 {
+            return false;
+        }
+
+        let last_tile = *candidate.last().unwrap();
+        if candidate[..n - 1].contains(&last_tile) {
+            return true;
+        }
+
+        !self.reachable(last_tile, candidate[n - 2], &candidate[..n - 1])
+    }
+
+    fn accept(&self, candidate: &[Tile]) -> bool {
+        candidate.len() == self.all_keys.len()
+    }
+
+    fn extensions(&self, candidate: Vec<Tile>) -> impl Iterator<Item = Vec<Tile>> {
+        self.all_keys.clone().into_iter().map(move |tile| {
+            let mut next = candidate.clone();
+            next.push(tile);
+            next
+        })
+    }
+
+    fn reachable(&self, tile: Tile, from: Tile, candidate: &[Tile]) -> bool {
+        //println!("{:?} -?> {:?}", from, tile);
+        let mut visited = HashSet::new();
+        self.depth_first_search(tile, from, &mut visited, candidate)
+        //self.breath_first_search(tile, from, candidate).is_some()
+    }
+
+    fn depth_first_search(
+        &self,
+        tile: Tile,
+        from: Tile,
+        visited: &mut HashSet<Tile>,
+        candidate: &[Tile],
+    ) -> bool {
+        if from == tile {
+            return true;
+        }
+
+        visited.insert(from);
+        if !self.passable(from, candidate) {
+            return false;
+        }
+        for next in self.neighbors(from) {
+            if visited.contains(&next) {
+                continue;
+            }
+            if self.depth_first_search(tile, next, visited, candidate) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn dijkstra_search(&self, tile: Tile, from: Tile, keys: &[Tile]) -> Option<usize> {
+        let mut dist = HashMap::new();
+        dist.insert(from, 0);
+
+        let mut queue = BinaryHeap::new();
+        queue.push((0, from));
+
+        for &t in self.map.keys() {
+            if t != from {
+                dist.insert(t, isize::max_value() - 1);
+            }
+        }
+
+        while let Some((negdist, u)) = queue.pop() {
+            if u == tile {
+                return Some((-negdist) as usize);
+            }
+            for &(v, duv) in &self.map[&u] {
+                if !self.passable(v, keys) {
+                    continue;
+                }
+                let alt = -negdist + duv as isize;
+                if alt < dist[&v] {
+                    dist.insert(v, alt);
+                    queue.push((-alt, v));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn passable(&self, tile: Tile, candidate: &[Tile]) -> bool {
+        if let Tile::Door(ch) = tile {
+            candidate.contains(&Tile::Key(ch.to_ascii_lowercase()))
+        } else {
+            true
+        }
+    }
+
+    fn neighbors<'a>(&'a self, tile: Tile) -> impl Iterator<Item = Tile> + 'a {
+        self.map[&tile].iter().map(|(t, _)| *t)
     }
 }
 
-fn build_mapgraph(pos: Pos, map: &HashMap<Pos, Tile>) -> HashMap<(Tile, Tile), usize> {
+fn build_mapgraph(pos: Pos, map: &HashMap<Pos, Tile>) -> HashMap<Tile, Vec<(Tile, usize)>> {
     let mut nodes = HashSet::new();
     let mut edges = HashMap::new();
 
@@ -40,7 +184,10 @@ fn build_mapgraph(pos: Pos, map: &HashMap<Pos, Tile>) -> HashMap<(Tile, Tile), u
     while let Some(pos) = queue.pop() {
         println!("{:?}", pos);
         for (tile, dist) in find_all_reachable(pos, map) {
-            edges.insert((map[&pos], map[&tile]), dist);
+            edges
+                .entry(map[&pos])
+                .or_insert(vec![])
+                .push((map[&tile], dist));
 
             if !nodes.contains(&tile) {
                 queue.push(tile);
@@ -60,7 +207,9 @@ fn find_all_reachable(start_pos: Pos, map: &HashMap<Pos, Tile>) -> HashSet<(Pos,
         visited.insert(pos);
         match map[&pos] {
             Tile::Wall => {}
-            Tile::Key(_) | Tile::Door(_) if pos != start_pos => {reachable.insert((pos, dist));}
+            Tile::Key(_) | Tile::Door(_) if pos != start_pos => {
+                reachable.insert((pos, dist));
+            }
             _ => {
                 if !visited.contains(&(pos + Direction::North)) {
                     queue.push_back((dist + 1, pos + Direction::North))
@@ -77,17 +226,27 @@ fn find_all_reachable(start_pos: Pos, map: &HashMap<Pos, Tile>) -> HashSet<(Pos,
             }
         }
     }
-    println!("{:?} -> {:?}", start_pos, reachable);
+    //println!("{:?} -> {:?}", start_pos, reachable);
     reachable
 }
 
 fn parse_map(input: &str) -> (HashMap<Pos, Tile>, Pos) {
-    let mut start_pos = Pos{x:0, y:0};
+    let mut start_pos = Pos { x: 0, y: 0 };
 
-    let map = input.lines().enumerate()
-        .flat_map(|(row, line)| line.chars().enumerate().map(move |(col, ch)| (col as i64, row as i64, ch)))
-        .inspect(|&(x, y, ch)| if ch == '@' {start_pos = Pos{x, y}})
-        .map(|(x, y, ch)| (Pos{x, y}, Tile::from(ch)))
+    let map = input
+        .lines()
+        .enumerate()
+        .flat_map(|(row, line)| {
+            line.chars()
+                .enumerate()
+                .map(move |(col, ch)| (col as i64, row as i64, ch))
+        })
+        .inspect(|&(x, y, ch)| {
+            if ch == '@' {
+                start_pos = Pos { x, y }
+            }
+        })
+        .map(|(x, y, ch)| (Pos { x, y }, Tile::from(ch)))
         .collect();
 
     (map, start_pos)
@@ -155,7 +314,7 @@ enum Direction {
     East = 4,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 enum Tile {
     Empty,
     Start,
@@ -177,22 +336,29 @@ impl From<char> for Tile {
     }
 }
 
-
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]
-    fn example() {
-        let input =
-"########################
-#f.D.E.e.C.b.A.@.a.B.c.#
-######################.#
-#d.....................#
-########################";
+    fn example18_1() {
+        let input = "#################
+#i.G..c...e..H.p#
+########.########
+#j.A..b...f..D.o#
+########@########
+#k.E..a...g..B.n#
+########.########
+#l.F..d...h..C.m#
+#################";
         let (map, start_pos) = parse_map(&input);
 
-        build_mapgraph(start_pos, &map);
-    }
+        let edges = build_mapgraph(start_pos, &map);
 
+        let mut part1 = Part1::new(edges);
+        part1.backtrack(vec![Tile::Start]);
+        for s in &part1.solutions {
+            println!("{} {:?}", part1.pathlen(s), s);
+        }
+    }
 }
