@@ -11,31 +11,33 @@ fn main() {
 
     let (map, start_pos) = parse_map(&input);
     println!("Part 1: {}", breadth_first_search(start_pos, &map));
-    println!("Part 2: {}", recursive_breadth_first_search(start_pos, &map));
+    println!(
+        "Part 2: {}",
+        recursive_breadth_first_search(start_pos, &map)
+    );
 }
 
 fn recursive_breadth_first_search(start: Pos, map: &HashMap<Pos, Tile>) -> usize {
     let mut queue = VecDeque::from(vec![(0, 0, start)]);
     let mut visited = HashSet::new();
     while let Some((level, steps, pos)) = queue.pop_front() {
-
         if visited.contains(&(level, pos)) {
-            continue
+            continue;
         }
         visited.insert((level, pos));
 
         match map.get(&pos).unwrap_or(&Tile::Wall) {
             Tile::Wall => {}
             Tile::Exit if level != 0 => {}
-            Tile::Exit => return steps - 2,  // remove one step for entry and one step for exit
+            Tile::Exit => return steps - 2, // remove one step for entry and one step for exit
             Tile::Empty | Tile::Entry => {
-                queue.push_back((level, steps+1, pos + Direction::North));
-                queue.push_back((level, steps+1, pos + Direction::South));
-                queue.push_back((level, steps+1, pos + Direction::East));
-                queue.push_back((level, steps+1, pos + Direction::West));
+                queue.push_back((level, steps + 1, pos + Direction::North));
+                queue.push_back((level, steps + 1, pos + Direction::South));
+                queue.push_back((level, steps + 1, pos + Direction::East));
+                queue.push_back((level, steps + 1, pos + Direction::West));
             }
             Tile::Outer(_) if level == 0 => {}
-            Tile:: Inner(out) => {
+            Tile::Inner(out) => {
                 queue.push_back((level + 1, steps, *out));
             }
             Tile::Outer(out) => {
@@ -50,20 +52,19 @@ fn breadth_first_search(start: Pos, map: &HashMap<Pos, Tile>) -> usize {
     let mut queue = VecDeque::from(vec![(0, start)]);
     let mut visited = HashSet::new();
     while let Some((steps, pos)) = queue.pop_front() {
-
         if visited.contains(&pos) {
-            continue
+            continue;
         }
         visited.insert(pos);
 
         match map.get(&pos).unwrap_or(&Tile::Wall) {
             Tile::Wall => {}
-            Tile::Exit => return steps - 2,  // remove one step for entry and one step for exit
+            Tile::Exit => return steps - 2, // remove one step for entry and one step for exit
             Tile::Empty | Tile::Entry => {
-                queue.push_back((steps+1, pos + Direction::North));
-                queue.push_back((steps+1, pos + Direction::South));
-                queue.push_back((steps+1, pos + Direction::East));
-                queue.push_back((steps+1, pos + Direction::West));
+                queue.push_back((steps + 1, pos + Direction::North));
+                queue.push_back((steps + 1, pos + Direction::South));
+                queue.push_back((steps + 1, pos + Direction::East));
+                queue.push_back((steps + 1, pos + Direction::West));
             }
             Tile::Outer(out) | Tile::Inner(out) => {
                 queue.push_back((steps, *out));
@@ -81,68 +82,72 @@ fn parse_map(input: &str) -> (HashMap<Pos, Tile>, Pos) {
 
     let mut portals: HashMap<String, HashSet<Pos>> = HashMap::new();
 
-    for i in 0..height-1 {
-        for j in 0..width-1 {
+    for i in 0..height - 1 {
+        for j in 0..width - 1 {
             if chars[i][j].is_alphabetic() {
-                if chars[i+1][j].is_alphabetic() {
-                    let name = format!("{}{}", chars[i][j], chars[i+1][j]);
+                if chars[i + 1][j].is_alphabetic() {
+                    let name = format!("{}{}", chars[i][j], chars[i + 1][j]);
                     if i == 0 {
-                        portals.entry(name).or_default().insert(Pos{x:j, y:1});
-                    }
-                    else if i == height - 2 || chars[i-1][j] == '.' {
-                        portals.entry(name).or_default().insert(Pos{x:j, y:i});
-                    }
-                    else if chars[i+2][j] == '.' {
-                        portals.entry(name).or_default().insert(Pos{x:j, y:i+1});
+                        portals.entry(name).or_default().insert(Pos { x: j, y: 1 });
+                    } else if i == height - 2 || chars[i - 1][j] == '.' {
+                        portals.entry(name).or_default().insert(Pos { x: j, y: i });
+                    } else if chars[i + 2][j] == '.' {
+                        portals
+                            .entry(name)
+                            .or_default()
+                            .insert(Pos { x: j, y: i + 1 });
                     }
                 }
 
-                if chars[i][j+1].is_alphabetic() {
-                    let name = format!("{}{}", chars[i][j], chars[i][j+1]);
+                if chars[i][j + 1].is_alphabetic() {
+                    let name = format!("{}{}", chars[i][j], chars[i][j + 1]);
                     if j == 0 {
-                        portals.entry(name).or_default().insert(Pos{x:1, y:i});
-                    }
-                    else if j == width - 2 || chars[i][j-1] == '.' {
-                        portals.entry(name).or_default().insert(Pos{x:j, y:i});
-                    }
-                    else if chars[i][j+2] == '.' {
-                        portals.entry(name).or_default().insert(Pos{x:j+1, y:i});
+                        portals.entry(name).or_default().insert(Pos { x: 1, y: i });
+                    } else if j == width - 2 || chars[i][j - 1] == '.' {
+                        portals.entry(name).or_default().insert(Pos { x: j, y: i });
+                    } else if chars[i][j + 2] == '.' {
+                        portals
+                            .entry(name)
+                            .or_default()
+                            .insert(Pos { x: j + 1, y: i });
                     }
                 }
             }
-
         }
     }
 
-    let portal_positions: HashMap<_, _> = portals.iter()
-        .flat_map(|(name, positions)|{
-            positions.iter().map(move |pos| (*pos, name.clone()))
-        })
+    let portal_positions: HashMap<_, _> = portals
+        .iter()
+        .flat_map(|(name, positions)| positions.iter().map(move |pos| (*pos, name.clone())))
         .collect();
 
     let mut tiles = HashMap::new();
 
-    let mut entry = Pos{x:0, y:0};
+    let mut entry = Pos { x: 0, y: 0 };
 
-    for i in 1..height-1 {
+    for i in 1..height - 1 {
         for j in 1..width - 1 {
-            let pos = Pos{x:j, y:i};
+            let pos = Pos { x: j, y: i };
             if let Some(name) = portal_positions.get(&pos) {
                 match name.as_str() {
                     "AA" => {
                         entry = pos;
                         tiles.insert(pos, Tile::Entry)
-                    },
-                    "ZZ" => {
-                        tiles.insert(pos, Tile::Exit)
-                    },
+                    }
+                    "ZZ" => tiles.insert(pos, Tile::Exit),
                     _ => {
                         let other = *portals[name].iter().find(|p| **p != pos).unwrap();
-                        let out = [Direction::North, Direction::South, Direction::East, Direction::West].iter()
-                            .map(|&d| other + d)
-                            .find(|p| chars[p.y][p.x] == '.')
-                            .unwrap();
-                        if i < 2 || j < 2 || i > height-3 || j > width - 3 {
+                        let out = [
+                            Direction::North,
+                            Direction::South,
+                            Direction::East,
+                            Direction::West,
+                        ]
+                        .iter()
+                        .map(|&d| other + d)
+                        .find(|p| chars[p.y][p.x] == '.')
+                        .unwrap();
+                        if i < 2 || j < 2 || i > height - 3 || j > width - 3 {
                             tiles.insert(pos, Tile::Outer(out))
                         } else {
                             tiles.insert(pos, Tile::Inner(out))
@@ -151,8 +156,12 @@ fn parse_map(input: &str) -> (HashMap<Pos, Tile>, Pos) {
                 };
             } else {
                 match chars[i][j] {
-                    '#' => {tiles.insert(pos, Tile::Wall);}
-                    '.' => {tiles.insert(pos, Tile::Empty);}
+                    '#' => {
+                        tiles.insert(pos, Tile::Wall);
+                    }
+                    '.' => {
+                        tiles.insert(pos, Tile::Empty);
+                    }
                     _ => {}
                 }
             }
@@ -161,7 +170,6 @@ fn parse_map(input: &str) -> (HashMap<Pos, Tile>, Pos) {
 
     (tiles, entry)
 }
-
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 struct Pos {
@@ -251,8 +259,7 @@ mod tests {
 
     #[test]
     fn example20_1() {
-        let input =
-            "         A    #######
+        let input = "         A    #######
          A    #######
   #######.###########
   #######.........###
@@ -278,8 +285,7 @@ FG..#########.....###
 
     #[test]
     fn example20_2() {
-        let input =
-"                   A  #############
+        let input = "                   A  #############
                    A  #############
   #################.###############
   #.#...#...................#.#.###
@@ -321,12 +327,9 @@ YN......#               VT..#....QG
         println!("{}", breadth_first_search(start_pos, &map));
     }
 
-
-
     #[test]
     fn example20_3() {
-        let input =
-            "         A    #######
+        let input = "         A    #######
          A    #######
   #######.###########
   #######.........###
