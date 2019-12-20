@@ -14,8 +14,11 @@ fn main() {
     let edges = build_mapgraph(start_pos, &map);
 
     let mut part1 = Part1::new(edges);
-    part1.backtrack((0, vec![Tile::Start]));
-    println!("{:?}", part1.solutions);
+    //part1.backtrack((0, vec![Tile::Start]));
+    //println!("{:?}", part1.solutions);
+    let mut keys: Vec<_> = part1.all_keys.iter().copied().filter(|&k| k != Tile::Start).collect();
+    keys.sort();
+    part1.recurse(&mut vec![Tile::Start], keys);
 }
 
 type Candidate = (usize, Vec<Tile>);
@@ -29,6 +32,7 @@ struct Part1 {
     minlen: usize,
 
     reachable_cache: HashMap<(Tile, Tile, Vec<Tile>), bool>,
+    recursion_cache: HashMap<(Tile, Vec<Tile>), usize>,
 }
 
 impl Part1 {
@@ -48,6 +52,7 @@ impl Part1 {
             solutions: vec![],
             minlen: usize::max_value(),
             reachable_cache: HashMap::new(),
+            recursion_cache: HashMap::new(),
         }
     }
 
@@ -58,6 +63,33 @@ impl Part1 {
                     .unwrap()
             })
             .sum()
+    }
+
+    fn recurse(&mut self, visited: &mut Vec<Tile>, remaining: Vec<Tile>) -> usize {
+        if remaining.is_empty() {
+            return 0
+        }
+
+        let state = (*visited.last().unwrap(), remaining);
+        if let Some(n) = self.recursion_cache.get(&state) {
+            return *n
+        }
+
+        let mut best = usize::max_value();
+        for next in state.1.iter().copied() {
+            if let Some(n) = self.dijkstra_search(next, *visited.last().unwrap(), &visited) {
+                visited.push(next);
+                let new_remaining = state.1.iter().copied().filter(|&r| r != next).collect();
+                let partial = self.recurse(visited, new_remaining);
+                visited.pop();
+                if partial + n < best {
+                    best = partial + n;
+                }
+            }
+        }
+        println!("{} {:?} {:?}", best, visited, state.1);
+        self.recursion_cache.insert(state, best);
+        best
     }
 
     fn backtrack(&mut self, candidate: Candidate) {
@@ -388,9 +420,12 @@ mod tests {
         let edges = build_mapgraph(start_pos, &map);
 
         let mut part1 = Part1::new(edges);
-        part1.backtrack((0, vec![Tile::Start]));
+        /*part1.backtrack((0, vec![Tile::Start]));
         for s in &part1.solutions {
             //println!("{} {:?}", part1.pathlen(s), s);
-        }
+        }*/
+        let mut keys: Vec<_> = part1.all_keys.iter().copied().filter(|&k| k != Tile::Start).collect();
+        keys.sort();
+        part1.recurse(&mut vec![Tile::Start], keys);
     }
 }
