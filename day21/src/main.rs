@@ -5,19 +5,12 @@ fn main() {
     use SCI::*;
     // only jump if we can land safely (at D) and there is a hole anywhere before D
     if let Some(n) = run_script(
-        &[
-            Or(A, J),
-            And(B, J),
-            And(C, J),
-            Not(J, J),
-            And(D, J),
-        ],
+        &[Or(A, J), And(B, J), And(C, J), Not(J, J), And(D, J)],
         false,
         true,
     ) {
         println!("Part 1: {}", n)
     }
-
 
     /* didn't need this part after all...
     let mut conditions = HashMap::new();
@@ -60,12 +53,10 @@ fn main() {
     if let Some(n) = run_script(
         &[
             Not(A, J),
-
             Or(D, T),
             And(D, T),
             And(H, T),
             Or(T, J),
-
             Or(A, T),
             And(A, T),
             And(B, T),
@@ -122,11 +113,11 @@ impl std::fmt::Display for SCI {
 #[allow(dead_code)]
 fn simulate(platform: &[bool]) -> (bool, bool) {
     if platform.is_empty() {
-        return (true, true)
+        return (true, true);
     }
 
-    if ! platform[0] {
-        return (false, false)
+    if !platform[0] {
+        return (false, false);
     }
 
     let no_jump = {
